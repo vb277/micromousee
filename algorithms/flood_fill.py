@@ -1,5 +1,3 @@
-# flood_fill.py
-
 import API
 import sys
 from collections import deque
@@ -10,35 +8,6 @@ def log(string):
     """
     sys.stderr.write("{}\n".format(string))
     sys.stderr.flush()
-
-def init_maze(width, height):
-    """
-    Initialize the maze with all cells set to infinity (indicating they are not reachable yet),
-    except for the goal cells which are set to 0 (distance to themselves is 0).
-    
-    Args:
-    width (int): The width of the maze.
-    height (int): The height of the maze.
-    
-    Returns:
-    list: A 2D list representing the initialized maze.
-    """
-    maze = [[float('inf')] * width for _ in range(height)]
-    # Define the goal cells
-    goal_cells = [(7, 7), (8, 7), (7, 8), (8, 8)]
-    for gx, gy in goal_cells:
-        maze[gy][gx] = 0  # Set distance to goal cells as 0
-    return maze
-
-def print_maze(maze):
-    """
-    Print the maze for debugging purposes. The maze is printed from top to bottom.
-    
-    Args:
-    maze (list): The 2D list representing the maze.
-    """
-    for row in maze[::-1]:  # Reverse the rows for correct visualization (top to bottom)
-        log(" ".join([str(cell) for cell in row]))
 
 def valid_position(x, y, width, height):
     """
@@ -86,8 +55,6 @@ def flood_fill(maze, width, height):
                 maze[ny][nx] = current_distance + 1
                 queue.append((nx, ny))  # Add the new cell to the queue for further processing
 
-    print_maze(maze)  # Print the maze for debugging
-
 def check_wall(direction):
     """
     Check for a wall in a given direction relative to the current orientation.
@@ -103,12 +70,11 @@ def check_wall(direction):
     elif direction == 1:  # EAST
         return API.wallRight()
     elif direction == 2:  # SOUTH (behind the robot, not directly visible)
-        # No direct method to check back, assuming it is checked as part of movement or another strategy
         return False  # Placeholder, should be handled differently in actual implementation
     elif direction == 3:  # WEST
         return API.wallLeft()
 
-def update_walls(x, y, direction, has_wall, width, height):
+def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
     """
     Update the internal map with the detected walls and print debug statements.
     
@@ -117,62 +83,100 @@ def update_walls(x, y, direction, has_wall, width, height):
     y (int): The y-coordinate of the current cell.
     direction (int): The direction of the wall (0 = NORTH, 1 = EAST, 2 = SOUTH, 3 = WEST).
     has_wall (bool): True if there is a wall, False otherwise.
-    width (int): The width of the maze.
-    height (int): The height of the maze.
+    horizontal_walls (list): 2D list representing horizontal walls.
+    vertical_walls (list): 2D list representing vertical walls.
     """
     if direction == 0:  # NORTH
         if has_wall:
+            horizontal_walls[y + 1][x] = 1
             API.setWall(x, y, 'n')
             log(f"Added wall in cell ({x}, {y}, N)")
-            if valid_position(x, y + 1, width, height):
+            if valid_position(x, y + 1, 16, 16):
                 API.setWall(x, y + 1, 's')
                 log(f"Added wall in cell ({x}, {y + 1}, S)")
     elif direction == 1:  # EAST
         if has_wall:
+            vertical_walls[y][x + 1] = 1
             API.setWall(x, y, 'e')
             log(f"Added wall in cell ({x}, {y}, E)")
-            if valid_position(x + 1, y, width, height):
+            if valid_position(x + 1, y, 16, 16):
                 API.setWall(x + 1, y, 'w')
                 log(f"Added wall in cell ({x + 1}, {y}, W)")
     elif direction == 3:  # WEST
         if has_wall:
+            vertical_walls[y][x] = 1
             API.setWall(x, y, 'w')
             log(f"Added wall in cell ({x}, {y}, W)")
-            if valid_position(x - 1, y, width, height):
+            if valid_position(x - 1, y, 16, 16):
                 API.setWall(x - 1, y, 'e')
                 log(f"Added wall in cell ({x - 1}, {y}, E)")
 
-def scan_and_update_walls(x, y, width, height):
+
+def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
     """
     Scan for walls in the current cell and update the internal map with print statements.
     
     Args:
     x (int): The x-coordinate of the current cell.
     y (int): The y-coordinate of the current cell.
-    width (int): The width of the maze.
-    height (int): The height of the maze.
+    horizontal_walls (list): 2D list representing horizontal walls.
+    vertical_walls (list): 2D list representing vertical walls.
     """
     directions = [0, 1, 3]  # NORTH, EAST, WEST
     for direction in directions:
         has_wall = check_wall(direction)
-        update_walls(x, y, direction, has_wall, width, height)
+        update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls)
+
+def print_walls(horizontal_walls, vertical_walls):
+    """
+    Print the internal wall representation for debugging purposes.
+    
+    Args:
+    horizontal_walls (list): 2D list representing horizontal walls.
+    vertical_walls (list): 2D list representing vertical walls.
+    """
+    log("Horizontal Walls:")
+    for row in horizontal_walls[::-1]:
+        log(" ".join(map(str, row)))
+    
+    log("Vertical Walls:")
+    for row in vertical_walls[::-1]:
+        log(" ".join(map(str, row)))
 
 def run_flood_fill():
     """
     Main function to run the flood fill algorithm.
     """
-    width = API.mazeWidth()  # Get the width of the maze
-    height = API.mazeHeight()  # Get the height of the maze
-    maze = init_maze(width, height)  # Initialize the maze
+    width, height = 16, 16  # Fixed size for the maze
+    maze = [[float('inf')] * width for _ in range(height)]
+    horizontal_walls = [[0] * width for _ in range(height + 1)]
+    vertical_walls = [[0] * (width + 1) for _ in range(height)]
+
+    # Initialize goal cells in the maze
+    goal_cells = [(7, 7), (8, 7), (7, 8), (8, 8)]
+    for gx, gy in goal_cells:
+        maze[gy][gx] = 0
+
+    # Initialize the borders of the maze
+    for i in range(width):
+        horizontal_walls[0][i] = 1  # Bottom border
+        horizontal_walls[height][i] = 1  # Top border
+    for i in range(height):
+        vertical_walls[i][0] = 1  # Left border
+        vertical_walls[i][width] = 1  # Right border
 
     flood_fill(maze, width, height)  # Perform the flood fill algorithm
 
     # Start scanning and updating walls from the start position
     x, y = 0, 0
-    scan_and_update_walls(x, y, width, height)
+    scan_and_update_walls(x, y, horizontal_walls, vertical_walls)
     
     # Print the distance map for debugging
-    print_maze(maze)
+    for row in maze[::-1]:
+        log(" ".join([str(cell) for cell in row]))
+
+    # Print the wall maps for debugging
+    print_walls(horizontal_walls, vertical_walls)
 
 if __name__ == "__main__":
     run_flood_fill()
