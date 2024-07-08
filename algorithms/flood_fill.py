@@ -127,6 +127,78 @@ def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
         has_wall = check_wall(direction)
         update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls)
 
+def can_move(x, y, direction, horizontal_walls, vertical_walls):
+    """
+    Check if the mouse can move from the current position in the given direction.
+    
+    Args:
+    x (int): The x-coordinate of the current cell.
+    y (int): The y-coordinate of the current cell.
+    direction (int): The direction of the movement (0 = NORTH, 1 = EAST, 2 = SOUTH, 3 = WEST).
+    horizontal_walls (list): 2D list representing horizontal walls.
+    vertical_walls (list): 2D list representing vertical walls.
+    
+    Returns:
+    bool: True if the move is possible, False otherwise.
+    """
+    width, height = 16, 16  # Fixed size for the maze
+    
+    if direction == 0:  # NORTH
+        if valid_position(x, y + 1, width, height):
+            can_move_north = horizontal_walls[y + 1][x] == 0
+            log(f"Checking NORTH: can move to ({x}, {y + 1}): {can_move_north}")
+            return can_move_north
+        return False
+    elif direction == 1:  # EAST
+        if valid_position(x + 1, y, width, height):
+            can_move_east = vertical_walls[y][x + 1] == 0
+            log(f"Checking EAST: can move to ({x + 1}, {y}): {can_move_east}")
+            return can_move_east
+        return False
+    elif direction == 2:  # SOUTH
+        if valid_position(x, y - 1, width, height):
+            can_move_south = horizontal_walls[y][x] == 0
+            log(f"Checking SOUTH: can move to ({x}, {y - 1}): {can_move_south}")
+            return can_move_south
+        return False
+    elif direction == 3:  # WEST
+        if valid_position(x - 1, y, width, height):
+            can_move_west = vertical_walls[y][x] == 0
+            log(f"Checking WEST: can move to ({x - 1}, {y}): {can_move_west}")
+            return can_move_west
+        return False
+    return False
+
+def get_accessible_neighbors(x, y, horizontal_walls, vertical_walls):
+    """
+    Get accessible neighboring cells from the current position using the can_move function.
+    
+    Args:
+    x (int): The x-coordinate of the current cell.
+    y (int): The y-coordinate of the current cell.
+    horizontal_walls (list): 2D list representing horizontal walls.
+    vertical_walls (list): 2D list representing vertical walls.
+    
+    Returns:
+    list: A list of accessible neighboring cells as (x, y) tuples.
+    """
+    neighbors = []
+    directions = ['NORTH', 'EAST', 'SOUTH', 'WEST']
+    
+    for direction in range(4):
+        if can_move(x, y, direction, horizontal_walls, vertical_walls):
+            if direction == 0:  # NORTH
+                neighbors.append((x, y + 1))
+            elif direction == 1:  # EAST
+                neighbors.append((x + 1, y))
+            elif direction == 2:  # SOUTH
+                neighbors.append((x, y - 1))
+            elif direction == 3:  # WEST
+                neighbors.append((x - 1, y))
+    
+    return neighbors
+
+
 def print_walls(horizontal_walls, vertical_walls):
     """
     Print the internal wall representation for debugging purposes.
@@ -170,6 +242,18 @@ def run_flood_fill():
     # Start scanning and updating walls from the start position
     x, y = 0, 0
     scan_and_update_walls(x, y, horizontal_walls, vertical_walls)
+    
+    # Check possible moves from the start position
+    directions = ['NORTH', 'EAST', 'SOUTH', 'WEST']
+    for direction in range(4):
+        if can_move(x, y, direction, horizontal_walls, vertical_walls):
+            log(f"Mouse can move {directions[direction]} from ({x}, {y})")
+        else:
+            log(f"Mouse cannot move {directions[direction]} from ({x}, {y})")
+    
+    # Get and print accessible neighbors from the start position
+    accessible_neighbors = get_accessible_neighbors(x, y, horizontal_walls, vertical_walls)
+    log(f"Accessible neighbors from ({x}, {y}): {accessible_neighbors}")
     
     # Print the distance map for debugging
     for row in maze[::-1]:
