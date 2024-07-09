@@ -111,7 +111,6 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
                 API.setWall(x - 1, y, 'e')
                 log(f"Added wall in cell ({x - 1}, {y}, E)")
 
-
 def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
     """
     Scan for walls in the current cell and update the internal map with print statements.
@@ -183,7 +182,6 @@ def get_accessible_neighbors(x, y, horizontal_walls, vertical_walls):
     list: A list of accessible neighboring cells as (x, y) tuples.
     """
     neighbors = []
-    directions = ['NORTH', 'EAST', 'SOUTH', 'WEST']
     
     for direction in range(4):
         if can_move(x, y, direction, horizontal_walls, vertical_walls):
@@ -198,6 +196,49 @@ def get_accessible_neighbors(x, y, horizontal_walls, vertical_walls):
     
     return neighbors
 
+def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls):
+    """
+    Move to the neighboring cell with the lowest value in the maze.
+    
+    Args:
+    x (int): The x-coordinate of the current cell.
+    y (int): The y-coordinate of the current cell.
+    maze (list): The 2D list representing the maze distances.
+    horizontal_walls (list): 2D list representing horizontal walls.
+    vertical_walls (list): 2D list representing vertical walls.
+    
+    Returns:
+    tuple: The coordinates of the new cell after moving.
+    """
+    neighbors = get_accessible_neighbors(x, y, horizontal_walls, vertical_walls)
+    lowest_value = float('inf')
+    next_x, next_y = x, y
+    
+    for nx, ny in neighbors:
+        if maze[ny][nx] < lowest_value:
+            lowest_value = maze[ny][nx]
+            next_x, next_y = nx, ny
+
+    log(f"Moving from ({x}, {y}) to ({next_x}, {next_y}) with value {lowest_value}")
+
+    if next_x == x and next_y == y + 1:
+        API.moveForward()
+    elif next_x == x + 1 and next_y == y:
+        API.turnRight()
+        API.moveForward()
+        API.turnLeft()
+    elif next_x == x and next_y == y - 1:
+        API.turnLeft()
+        API.turnLeft()
+        API.moveForward()
+        API.turnLeft()
+        API.turnLeft()
+    elif next_x == x - 1 and next_y == y:
+        API.turnLeft()
+        API.moveForward()
+        API.turnRight()
+
+    return next_x, next_y
 
 def print_walls(horizontal_walls, vertical_walls):
     """
@@ -241,25 +282,27 @@ def run_flood_fill():
 
     # Start scanning and updating walls from the start position
     x, y = 0, 0
-    scan_and_update_walls(x, y, horizontal_walls, vertical_walls)
-    
-    # Check possible moves from the start position
-    directions = ['NORTH', 'EAST', 'SOUTH', 'WEST']
-    for direction in range(4):
-        if can_move(x, y, direction, horizontal_walls, vertical_walls):
-            log(f"Mouse can move {directions[direction]} from ({x}, {y})")
-        else:
-            log(f"Mouse cannot move {directions[direction]} from ({x}, {y})")
-    
-    # Get and print accessible neighbors from the start position
-    accessible_neighbors = get_accessible_neighbors(x, y, horizontal_walls, vertical_walls)
-    log(f"Accessible neighbors from ({x}, {y}): {accessible_neighbors}")
-    
-    # Print the distance map for debugging
+    while (x, y) not in goal_cells:
+        log(f"Scanning and updating walls at ({x}, {y})")
+        scan_and_update_walls(x, y, horizontal_walls, vertical_walls)
+        
+        log(f"Determining next move from ({x}, {y})")
+        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls)
+        log(f"Moved to ({x}, {y})")
+        
+        # Print the distance map and wall maps after each move
+        log("Distance map:")
+        for row in maze[::-1]:
+            log(" ".join([str(cell) for cell in row]))
+        
+        print_walls(horizontal_walls, vertical_walls)
+
+    # Print the final distance map for debugging
+    log("Final distance map:")
     for row in maze[::-1]:
         log(" ".join([str(cell) for cell in row]))
 
-    # Print the wall maps for debugging
+    # Print the final wall maps for debugging
     print_walls(horizontal_walls, vertical_walls)
 
 if __name__ == "__main__":
