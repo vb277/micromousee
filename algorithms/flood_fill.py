@@ -25,35 +25,23 @@ def valid_position(x, y, width, height):
     return 0 <= x < width and 0 <= y < height
 
 def flood_fill(maze, width, height):
-    """
-    Perform the flood fill algorithm to propagate the distance values from the goal cells.
-    
-    Args:
-    maze (list): The 2D list representing the maze.
-    width (int): The width of the maze.
-    height (int): The height of the maze.
-    """
-    # Define the possible directions of movement: NORTH, EAST, SOUTH, WEST
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-    # Define the goal cells
     goal_cells = [(7, 7), (8, 7), (7, 8), (8, 8)]
-    # Initialize a queue with the goal cells
     queue = deque(goal_cells)
 
     while queue:
-        x, y = queue.popleft()  # Get the current cell from the queue
-        current_distance = maze[y][x]  # Get the distance value of the current cell
-
-        # Set the distance value in the simulator using setText
+        x, y = queue.popleft()
+        current_distance = maze[y][x]
         API.setText(x, y, str(int(current_distance)))
 
-        # Check all possible directions from the current cell
         for dx, dy in directions:
-            nx, ny = x + dx, y + dy  # Calculate the new cell coordinates
+            nx, ny = x + dx, y + dy
             if valid_position(nx, ny, width, height) and maze[ny][nx] == float('inf'):
-                # If the new cell is within bounds and not yet visited, update its distance
                 maze[ny][nx] = current_distance + 1
-                queue.append((nx, ny))  # Add the new cell to the queue for further processing
+                queue.append((nx, ny))
+
+    # Show the initial flood fill result
+    show(maze)
 
 def check_wall(direction):
     """
@@ -196,30 +184,30 @@ def get_accessible_neighbors(x, y, horizontal_walls, vertical_walls):
     
     return neighbors
 
+
 def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls):
-    """
-    Move to the neighboring cell with the lowest value in the maze.
-    
-    Args:
-    x (int): The x-coordinate of the current cell.
-    y (int): The y-coordinate of the current cell.
-    maze (list): The 2D list representing the maze distances.
-    horizontal_walls (list): 2D list representing horizontal walls.
-    vertical_walls (list): 2D list representing vertical walls.
-    
-    Returns:
-    tuple: The coordinates of the new cell after moving.
-    """
     neighbors = get_accessible_neighbors(x, y, horizontal_walls, vertical_walls)
     lowest_value = float('inf')
     next_x, next_y = x, y
-    
+
     for nx, ny in neighbors:
         if maze[ny][nx] < lowest_value:
             lowest_value = maze[ny][nx]
             next_x, next_y = nx, ny
 
+    if lowest_value >= maze[y][x]:
+        log(f"Stuck at ({x}, {y}). Recalculating distances.")
+        recalculate_distances(x, y, maze, horizontal_walls, vertical_walls)
+        neighbors = get_accessible_neighbors(x, y, horizontal_walls, vertical_walls)
+        lowest_value = float('inf')
+        for nx, ny in neighbors:
+            if maze[ny][nx] < lowest_value:
+                lowest_value = maze[ny][nx]
+                next_x, next_y = nx, ny
+
     log(f"Moving from ({x}, {y}) to ({next_x}, {next_y}) with value {lowest_value}")
+    
+    show(maze, highlight_cells=[(x, y), (next_x, next_y)])
 
     if next_x == x and next_y == y + 1:
         API.moveForward()
@@ -240,6 +228,28 @@ def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls):
 
     return next_x, next_y
 
+
+
+def show(maze, highlight_cells=None):
+    """
+    Update the simulator display with the current distance values.
+    Optionally highlight specific cells.
+
+    Args:
+    maze (list): The 2D list representing the maze distances.
+    highlight_cells (list): List of (x, y) tuples to highlight. Default is None.
+    """
+    width, height = len(maze[0]), len(maze)
+    for y in range(height):
+        for x in range(width):
+            # Update the distance value in the simulator
+            API.setText(x, y, str(int(maze[y][x])))
+            # Highlight specific cells if provided
+            if highlight_cells and (x, y) in highlight_cells:
+                API.setColor(x, y, 'y')
+            else:
+                API.clearColor(x, y)
+
 def print_walls(horizontal_walls, vertical_walls):
     """
     Print the internal wall representation for debugging purposes.
@@ -256,31 +266,56 @@ def print_walls(horizontal_walls, vertical_walls):
     for row in vertical_walls[::-1]:
         log(" ".join(map(str, row)))
 
+def recalculate_distances(x, y, maze, horizontal_walls, vertical_walls):
+    queue = deque([(x, y)])
+    visited = set()
+
+    while queue:
+        cx, cy = queue.popleft()
+        if (cx, cy) in visited:
+            continue
+        visited.add((cx, cy))
+
+        neighbors = get_accessible_neighbors(cx, cy, horizontal_walls, vertical_walls)
+        neighbor_values = [maze[ny][nx] for nx, ny in neighbors]
+
+        log(f"Processing cell ({cx}, {cy}) with neighbors: {neighbors}")
+
+        min_value = min(neighbor_values)
+
+        # Update the current cell's distance value if necessary
+        if maze[cy][cx] <= min_value:
+            old_value = maze[cy][cx]
+            maze[cy][cx] = min_value + 1
+            log(f"Updating cell ({cx}, {cy}) from {old_value} to {maze[cy][cx]}")
+            API.setText(cx, cy, str(int(maze[cy][cx])))
+
+            for nx, ny in neighbors:
+                if (nx, ny) not in visited:
+                    queue.append((nx, ny))
+
+        show(maze, highlight_cells=[(cx, cy)] + neighbors)
+
+
 def run_flood_fill():
-    """
-    Main function to run the flood fill algorithm.
-    """
     width, height = 16, 16  # Fixed size for the maze
     maze = [[float('inf')] * width for _ in range(height)]
     horizontal_walls = [[0] * width for _ in range(height + 1)]
     vertical_walls = [[0] * (width + 1) for _ in range(height)]
 
-    # Initialize goal cells in the maze
     goal_cells = [(7, 7), (8, 7), (7, 8), (8, 8)]
     for gx, gy in goal_cells:
         maze[gy][gx] = 0
 
-    # Initialize the borders of the maze
     for i in range(width):
-        horizontal_walls[0][i] = 1  # Bottom border
-        horizontal_walls[height][i] = 1  # Top border
+        horizontal_walls[0][i] = 1
+        horizontal_walls[height][i] = 1
     for i in range(height):
-        vertical_walls[i][0] = 1  # Left border
-        vertical_walls[i][width] = 1  # Right border
+        vertical_walls[i][0] = 1
+        vertical_walls[i][width] = 1
 
-    flood_fill(maze, width, height)  # Perform the flood fill algorithm
+    flood_fill(maze, width, height)
 
-    # Start scanning and updating walls from the start position
     x, y = 0, 0
     while (x, y) not in goal_cells:
         log(f"Scanning and updating walls at ({x}, {y})")
@@ -290,19 +325,16 @@ def run_flood_fill():
         x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls)
         log(f"Moved to ({x}, {y})")
         
-        # Print the distance map and wall maps after each move
         log("Distance map:")
         for row in maze[::-1]:
             log(" ".join([str(cell) for cell in row]))
         
         print_walls(horizontal_walls, vertical_walls)
 
-    # Print the final distance map for debugging
     log("Final distance map:")
     for row in maze[::-1]:
         log(" ".join([str(cell) for cell in row]))
 
-    # Print the final wall maps for debugging
     print_walls(horizontal_walls, vertical_walls)
 
 if __name__ == "__main__":
