@@ -11,8 +11,8 @@ current_orientation = NORTH
 
 x, y = 0, 0
 
-horizontal_walls = [[0] * 16 for _ in range(17)]
-vertical_walls = [[0] * 17 for _ in range(16)]
+horizontal_walls = [[0] * 6 for _ in range(7)]
+vertical_walls = [[0] * 7 for _ in range(6)]
 
 def log(string):
     """
@@ -40,13 +40,12 @@ def turn_around():
     current_orientation = (current_orientation + 2) % 4
     log(f"Turned around. New orientation: {current_orientation}")
 
-def valid_position(x, y, width=16, height=16):
+def valid_position(x, y, width, height):
     return 0 <= x < width and 0 <= y < height
 
 def flood_fill(maze, width, height):
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-    # goal_cells = [(2, 2), (3, 2), (2, 3), (3, 3)]
-    goal_cells = [(7, 7), (8, 7), (7, 8), (8, 8)]  # Updated goal cells for 16x16 maze
+    goal_cells = [(2, 2), (3, 2), (2, 3), (3, 3)]
     queue = deque(goal_cells)
 
     while queue:
@@ -94,7 +93,7 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
             horizontal_walls[y + 1][x] = 1
             API.setWall(x, y, 'n')
             log(f"Added wall in cell ({x}, {y}, N)")
-            if valid_position(x, y + 1, 16, 16):
+            if valid_position(x, y + 1, 6, 6):
                 API.setWall(x, y + 1, 's')
                 log(f"Added wall in cell ({x}, {y + 1}, S)")
     elif actual_direction == 1:  # EAST
@@ -102,7 +101,7 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
             vertical_walls[y][x + 1] = 1
             API.setWall(x, y, 'e')
             log(f"Added wall in cell ({x}, {y}, E)")
-            if valid_position(x + 1, y, 16, 16):
+            if valid_position(x + 1, y, 6, 6):
                 API.setWall(x + 1, y, 'w')
                 log(f"Added wall in cell ({x + 1}, {y}, W)")
     elif actual_direction == 2:  # SOUTH
@@ -110,7 +109,7 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
             horizontal_walls[y][x] = 1
             API.setWall(x, y, 's')
             log(f"Added wall in cell ({x}, {y}, S)")
-            if valid_position(x, y - 1, 16, 16):
+            if valid_position(x, y - 1, 6, 6):
                 API.setWall(x, y - 1, 'n')
                 log(f"Added wall in cell ({x}, {y - 1}, N)")
     elif actual_direction == 3:  # WEST
@@ -118,7 +117,7 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
             vertical_walls[y][x] = 1
             API.setWall(x, y, 'w')
             log(f"Added wall in cell ({x}, {y}, W)")
-            if valid_position(x - 1, y, 16, 16):
+            if valid_position(x - 1, y, 6, 6):
                 API.setWall(x - 1, y, 'e')
                 log(f"Added wall in cell ({x - 1}, {y}, E)")
 
@@ -133,7 +132,7 @@ def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
     log(f"Scanned walls at ({x}, {y}), orientation: {current_orientation}")
 
 def can_move(x, y, direction, horizontal_walls, vertical_walls):
-    width, height = 16, 16  # Fixed size for the maze
+    width, height = 6, 6  # Fixed size for the maze
     
     if direction == 0:  # NORTH
         if valid_position(x, y + 1, width, height):
@@ -263,7 +262,7 @@ def show(maze, highlight_cells=None):
         for x in range(width):
             # Update the distance value in the simulator
             API.setText(x, y, str(int(maze[y][x])))
-        
+
 
 def recalculate_distances(x, y, maze, horizontal_walls, vertical_walls):
     queue = deque([(x, y)])
@@ -306,16 +305,13 @@ def update_position_after_move():
         x -= 1
     log(f"Updated position after move: ({x}, {y}), orientation: {current_orientation}")
 
-def run_flood_fill():
-    width, height = 16, 16  # Updated size for the maze
-    # width, height = 6, 6  # Fixed size for the maze
+def run_flood_fill_6():
+    width, height = 6, 6  # Fixed size for the maze
     maze = [[float('inf')] * width for _ in range(height)]
     
     # Initialize internal wall representations with boundary walls
-    horizontal_walls = [[0] * 16 for _ in range(17)]
-    vertical_walls = [[0] * 17 for _ in range(16)]
-    # horizontal_walls = [[0] * 6 for _ in range(7)]
-    # vertical_walls = [[0] * 7 for _ in range(6)]
+    horizontal_walls = [[0] * 6 for _ in range(7)]
+    vertical_walls = [[0] * 7 for _ in range(6)]
     for i in range(width):
         horizontal_walls[0][i] = 1
         horizontal_walls[height][i] = 1
@@ -329,8 +325,7 @@ def run_flood_fill():
 
     log("Boundary walls initialized.")
 
-    goal_cells = [(7, 7), (8, 7), (7, 8), (8, 8)]
-    # goal_cells = [(2, 2), (3, 2), (2, 3), (3, 3)]
+    goal_cells = [(2, 2), (3, 2), (2, 3), (3, 3)]
     for gx, gy in goal_cells:
         maze[gy][gx] = 0
 
@@ -351,4 +346,4 @@ def run_flood_fill():
         log(" ".join([str(cell) for cell in row]))
 
 if __name__ == "__main__":
-    run_flood_fill()
+    run_flood_fill_6()
