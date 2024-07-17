@@ -21,6 +21,16 @@ def log(string):
     sys.stderr.write("{}\n".format(string))
     sys.stderr.flush()
 
+def log_stats():
+    stats = [
+        "total-distance", "total-turns", "best-run-distance", "best-run-turns",
+        "current-run-distance", "current-run-turns", "total-effective-distance",
+        "best-run-effective-distance", "current-run-effective-distance", "score"
+    ]
+    for stat in stats:
+        value = API.getStat(stat)
+        log(f"{stat}: {value}")
+
 def turn_left():
     global current_orientation
     API.turnLeft()
@@ -40,13 +50,12 @@ def turn_around():
     current_orientation = (current_orientation + 2) % 4
     log(f"Turned around. New orientation: {current_orientation}")
 
-def valid_position(x, y, width=16, height=16):
+def valid_position(x, y, width, height):
     return 0 <= x < width and 0 <= y < height
 
 def flood_fill(maze, width, height):
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-    # goal_cells = [(2, 2), (3, 2), (2, 3), (3, 3)]
-    goal_cells = [(7, 7), (8, 7), (7, 8), (8, 8)]  # Updated goal cells for 16x16 maze
+    goal_cells = [(7, 7), (8, 7), (7, 8), (8, 8)]
     queue = deque(goal_cells)
 
     while queue:
@@ -65,7 +74,6 @@ def flood_fill(maze, width, height):
     # Show the initial flood fill result
     show(maze)
 
-
 def check_wall(direction):
     actual_direction = (current_orientation + direction) % 4
     if direction == 0:  # Front
@@ -74,7 +82,6 @@ def check_wall(direction):
         return API.wallRight()
     elif direction == 3:  # Left
         return API.wallLeft()
-
 
 def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
     """
@@ -122,7 +129,6 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
                 API.setWall(x - 1, y, 'e')
                 log(f"Added wall in cell ({x - 1}, {y}, E)")
 
-
 def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
     directions = [0, 1, 3]  # NORTH, EAST, WEST
     log(f"Scanning walls at ({x}, {y}) with orientation {current_orientation}")
@@ -132,42 +138,44 @@ def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
         update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls)
     log(f"Scanned walls at ({x}, {y}), orientation: {current_orientation}")
 
-def can_move(x, y, direction, horizontal_walls, vertical_walls):
+def can_move(x, y, direction, maze, horizontal_walls, vertical_walls):
     width, height = 16, 16  # Fixed size for the maze
+    current_value = maze[y][x]
     
     if direction == 0:  # NORTH
         if valid_position(x, y + 1, width, height):
-            can_move_north = horizontal_walls[y + 1][x] == 0
+            can_move_north = horizontal_walls[y + 1][x] == 0 and maze[y + 1][x] < current_value
             log(f"Checking NORTH: can move to ({x}, {y + 1}): {can_move_north}")
             return can_move_north
         return False
     elif direction == 1:  # EAST
         if valid_position(x + 1, y, width, height):
-            can_move_east = vertical_walls[y][x + 1] == 0
+            can_move_east = vertical_walls[y][x + 1] == 0 and maze[y][x + 1] < current_value
             log(f"Checking EAST: can move to ({x + 1}, {y}): {can_move_east}")
             return can_move_east
         return False
     elif direction == 2:  # SOUTH
         if valid_position(x, y - 1, width, height):
-            can_move_south = horizontal_walls[y][x] == 0
+            can_move_south = horizontal_walls[y][x] == 0 and maze[y - 1][x] < current_value
             log(f"Checking SOUTH: can move to ({x}, {y - 1}): {can_move_south}")
             return can_move_south
         return False
     elif direction == 3:  # WEST
         if valid_position(x - 1, y, width, height):
-            can_move_west = vertical_walls[y][x] == 0
+            can_move_west = vertical_walls[y][x] == 0 and maze[y][x - 1] < current_value
             log(f"Checking WEST: can move to ({x - 1}, {y}): {can_move_west}")
             return can_move_west
         return False
     return False
 
-def get_accessible_neighbors(x, y, horizontal_walls, vertical_walls):
+def get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls):
     """
     Get accessible neighboring cells from the current position using the can_move function.
     
     Args:
     x (int): The x-coordinate of the current cell.
     y (int): The y-coordinate of the current cell.
+    maze (list): 2D list representing the maze distances.
     horizontal_walls (list): 2D list representing horizontal walls.
     vertical_walls (list): 2D list representing vertical walls.
     
@@ -177,7 +185,7 @@ def get_accessible_neighbors(x, y, horizontal_walls, vertical_walls):
     neighbors = []
     
     for direction in range(4):
-        if can_move(x, y, direction, horizontal_walls, vertical_walls):
+        if can_move(x, y, direction, maze, horizontal_walls, vertical_walls):
             if direction == 0:  # NORTH
                 neighbors.append((x, y + 1))
             elif direction == 1:  # EAST
@@ -189,10 +197,9 @@ def get_accessible_neighbors(x, y, horizontal_walls, vertical_walls):
     
     return neighbors
 
-
-def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls):
+def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells):
     global current_orientation  # Use the global orientation
-    neighbors = get_accessible_neighbors(x, y, horizontal_walls, vertical_walls)
+    neighbors = get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls)
     lowest_value = float('inf')
     next_x, next_y = x, y
 
@@ -205,8 +212,8 @@ def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls):
 
     if lowest_value >= maze[y][x]:
         log(f"Stuck at ({x}, {y}). Recalculating distances.")
-        recalculate_distances(x, y, maze, horizontal_walls, vertical_walls)
-        neighbors = get_accessible_neighbors(x, y, horizontal_walls, vertical_walls)
+        recalculate_distances_from_goal(maze, horizontal_walls, vertical_walls, goal_cells)
+        neighbors = get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls)  # Re-evaluate neighbors after recalculating distances
         lowest_value = float('inf')
         for nx, ny in neighbors:
             log(f"Neighbor ({nx}, {ny}) has value {maze[ny][nx]}")
@@ -218,36 +225,73 @@ def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls):
     show(maze, highlight_cells=[(x, y), (next_x, next_y)])
 
     # Determine the direction to move based on next_x and next_y
+    target_orientation = current_orientation
     if next_x == x and next_y == y + 1:  # Move North
-        if current_orientation != NORTH:
-            while current_orientation != NORTH:
-                turn_left()
-        API.moveForward()
-        y += 1
+        target_orientation = NORTH
     elif next_x == x + 1 and next_y == y:  # Move East
-        if current_orientation != EAST:
-            while current_orientation != EAST:
-                turn_right()
-        API.moveForward()
-        x += 1
+        target_orientation = EAST
     elif next_x == x and next_y == y - 1:  # Move South
-        if current_orientation != SOUTH:
-            while current_orientation != SOUTH:
-                turn_right()
-        API.moveForward()
-        y -= 1
+        target_orientation = SOUTH
     elif next_x == x - 1 and next_y == y:  # Move West
-        if current_orientation != WEST:
-            while current_orientation != WEST:
-                turn_left()
-        API.moveForward()
-        x -= 1
+        target_orientation = WEST
+
+    # Optimize turn to the target orientation
+    while current_orientation != target_orientation:
+        log(f"Current orientation: {current_orientation}, Target: {target_orientation}")
+        # Determine shortest turn direction
+        if (target_orientation - current_orientation) % 4 == 1:
+            turn_right()
+        elif (target_orientation - current_orientation) % 4 == 3:
+            turn_left()
+        elif (target_orientation - current_orientation) % 4 == 2:
+            turn_around()
+
+    API.moveForward()
+    if next_x == x:
+        y = next_y
+    else:
+        x = next_x
 
     log(f"Updated position after move: ({x}, {y}), orientation: {current_orientation}")
-
+    log("____________________")
     return x, y
 
+def recalculate_distances_from_goal(maze, horizontal_walls, vertical_walls, goal_cells):
+    width, height = len(maze[0]), len(maze)
+    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+    queue = deque(goal_cells)
 
+    # Set all cells to infinity except goal cells
+    for y in range(height):
+        for x in range(width):
+            if (x, y) not in goal_cells:
+                maze[y][x] = float('inf')
+
+    for gx, gy in goal_cells:
+        maze[gy][gx] = 0
+
+    while queue:
+        x, y = queue.popleft()
+        current_distance = maze[y][x]
+
+        for dx, dy in directions:
+            nx, ny = x + dx, y + dy
+            if valid_position(nx, ny, width, height):
+                if (dx, dy) == (0, 1) and horizontal_walls[y + 1][x] == 1:
+                    continue  # There's a wall to the North
+                if (dx, dy) == (1, 0) and vertical_walls[y][x + 1] == 1:
+                    continue  # There's a wall to the East
+                if (dx, dy) == (0, -1) and horizontal_walls[y][x] == 1:
+                    continue  # There's a wall to the South
+                if (dx, dy) == (-1, 0) and vertical_walls[y][x] == 1:
+                    continue  # There's a wall to the West
+
+                if maze[ny][nx] == float('inf'):
+                    maze[ny][nx] = current_distance + 1
+                    queue.append((nx, ny))
+                    API.setText(nx, ny, str(int(maze[ny][nx])))
+
+    show(maze)
 
 def show(maze, highlight_cells=None):
     """
@@ -263,59 +307,14 @@ def show(maze, highlight_cells=None):
         for x in range(width):
             # Update the distance value in the simulator
             API.setText(x, y, str(int(maze[y][x])))
-        
-
-def recalculate_distances(x, y, maze, horizontal_walls, vertical_walls):
-    queue = deque([(x, y)])
-    in_queue = set([(x, y)])
-    width, height = len(maze[0]), len(maze)
-    
-    while queue:
-        cx, cy = queue.popleft()
-        in_queue.remove((cx, cy))
-
-        neighbors = get_accessible_neighbors(cx, cy, horizontal_walls, vertical_walls)
-        neighbor_values = [maze[ny][nx] for nx, ny in neighbors]
-
-        log(f"Processing cell ({cx}, {cy}) with neighbors: {neighbors}")
-
-        min_value = min(neighbor_values)
-
-        if maze[cy][cx] <= min_value:
-            old_value = maze[cy][cx]
-            maze[cy][cx] = min_value + 1
-            log(f"Updating cell ({cx}, {cy}) from {old_value} to {maze[cy][cx]}")
-            API.setText(cx, cy, str(int(maze[cy][cx])))
-
-            for nx, ny in neighbors:
-                if (nx, ny) not in in_queue:
-                    queue.append((nx, ny))
-                    in_queue.add((nx, ny))
-
-        show(maze, highlight_cells=[(cx, cy)] + neighbors)
-
-def update_position_after_move():
-    global x, y
-    if current_orientation == NORTH:
-        y += 1
-    elif current_orientation == EAST:
-        x += 1
-    elif current_orientation == SOUTH:
-        y -= 1
-    elif current_orientation == WEST:
-        x -= 1
-    log(f"Updated position after move: ({x}, {y}), orientation: {current_orientation}")
 
 def run_flood_fill():
-    width, height = 16, 16  # Updated size for the maze
-    # width, height = 6, 6  # Fixed size for the maze
+    width, height = 16, 16  # Fixed size for the maze
     maze = [[float('inf')] * width for _ in range(height)]
     
     # Initialize internal wall representations with boundary walls
     horizontal_walls = [[0] * 16 for _ in range(17)]
     vertical_walls = [[0] * 17 for _ in range(16)]
-    # horizontal_walls = [[0] * 6 for _ in range(7)]
-    # vertical_walls = [[0] * 7 for _ in range(6)]
     for i in range(width):
         horizontal_walls[0][i] = 1
         horizontal_walls[height][i] = 1
@@ -330,7 +329,6 @@ def run_flood_fill():
     log("Boundary walls initialized.")
 
     goal_cells = [(7, 7), (8, 7), (7, 8), (8, 8)]
-    # goal_cells = [(2, 2), (3, 2), (2, 3), (3, 3)]
     for gx, gy in goal_cells:
         maze[gy][gx] = 0
 
@@ -343,12 +341,15 @@ def run_flood_fill():
         
         log(f"Determining next move from ({x}, {y})")
         log(f"Current position: ({x}, {y}), orientation: {current_orientation}")
-        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls)
+        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells)
         log(f"Moved to ({x}, {y})")
 
     log("Final distance map:")
     for row in maze[::-1]:
         log(" ".join([str(cell) for cell in row]))
+
+    # Log stats at the end of the run
+    log_stats()
 
 if __name__ == "__main__":
     run_flood_fill()

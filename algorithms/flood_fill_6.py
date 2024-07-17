@@ -21,6 +21,18 @@ def log(string):
     sys.stderr.write("{}\n".format(string))
     sys.stderr.flush()
 
+
+def log_stats():
+    stats = [
+        "total-distance", "total-turns", "best-run-distance", "best-run-turns",
+        "current-run-distance", "current-run-turns", "total-effective-distance",
+        "best-run-effective-distance", "current-run-effective-distance", "score"
+    ]
+    for stat in stats:
+        value = API.getStat(stat)
+        log(f"{stat}: {value}")
+
+
 def turn_left():
     global current_orientation
     API.turnLeft()
@@ -342,6 +354,9 @@ def run_flood_fill_6():
     log("Final distance map:")
     for row in maze[::-1]:
         log(" ".join([str(cell) for cell in row]))
+
+    # Log stats at the end of the run
+    log_stats()
 
 if __name__ == "__main__":
     run_flood_fill_6()
