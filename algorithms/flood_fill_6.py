@@ -217,34 +217,37 @@ def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_c
     show(maze, highlight_cells=[(x, y), (next_x, next_y)])
 
     # Determine the direction to move based on next_x and next_y
+    target_orientation = current_orientation
     if next_x == x and next_y == y + 1:  # Move North
-        if current_orientation != NORTH:
-            while current_orientation != NORTH:
-                turn_left()
-        API.moveForward()
-        y += 1
+        target_orientation = NORTH
     elif next_x == x + 1 and next_y == y:  # Move East
-        if current_orientation != EAST:
-            while current_orientation != EAST:
-                turn_right()
-        API.moveForward()
-        x += 1
+        target_orientation = EAST
     elif next_x == x and next_y == y - 1:  # Move South
-        if current_orientation != SOUTH:
-            while current_orientation != SOUTH:
-                turn_right()
-        API.moveForward()
-        y -= 1
+        target_orientation = SOUTH
     elif next_x == x - 1 and next_y == y:  # Move West
-        if current_orientation != WEST:
-            while current_orientation != WEST:
-                turn_left()
-        API.moveForward()
-        x -= 1
+        target_orientation = WEST
+
+    # Optimize turn to the target orientation
+    while current_orientation != target_orientation:
+        log(f"Current orientation: {current_orientation}, Target: {target_orientation}")
+        # Determine shortest turn direction
+        if (target_orientation - current_orientation) % 4 == 1:
+            turn_right()
+        elif (target_orientation - current_orientation) % 4 == 3:
+            turn_left()
+        elif (target_orientation - current_orientation) % 4 == 2:
+            turn_around()
+
+    API.moveForward()
+    if next_x == x:
+        y = next_y
+    else:
+        x = next_x
 
     log(f"Updated position after move: ({x}, {y}), orientation: {current_orientation}")
-
+    log("____________________")
     return x, y
+
 
 
 def recalculate_distances_from_goal(maze, horizontal_walls, vertical_walls, goal_cells):
