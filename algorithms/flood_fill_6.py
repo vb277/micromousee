@@ -55,10 +55,12 @@ def turn_around():
 def valid_position(x, y, width, height):
     return 0 <= x < width and 0 <= y < height
 
-def flood_fill(maze, width, height):
+def flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls):
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-    goal_cells = [(2, 2), (3, 2), (2, 3), (3, 3)]
     queue = deque(goal_cells)
+
+    for gx, gy in goal_cells:
+        maze[gy][gx] = 0
 
     while queue:
         x, y = queue.popleft()
@@ -70,11 +72,16 @@ def flood_fill(maze, width, height):
         for dx, dy in directions:
             nx, ny = x + dx, y + dy
             if valid_position(nx, ny, width, height) and maze[ny][nx] == float('inf'):
-                maze[ny][nx] = current_distance + 1
-                queue.append((nx, ny))
+                if not ((dx == 0 and dy == 1 and horizontal_walls[y + 1][x]) or
+                        (dx == 1 and dy == 0 and vertical_walls[y][x + 1]) or
+                        (dx == 0 and dy == -1 and horizontal_walls[y][x]) or
+                        (dx == -1 and dy == 0 and vertical_walls[y][x])):
+                    maze[ny][nx] = current_distance + 1
+                    queue.append((nx, ny))
 
     # Show the initial flood fill result
     show(maze)
+
 
 def check_wall(direction):
     actual_direction = (current_orientation + direction) % 4
@@ -200,6 +207,43 @@ def get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls):
     
     return neighbors
 
+def recalculate_distances_from_goal(maze, horizontal_walls, vertical_walls, goal_cells):
+    width, height = len(maze[0]), len(maze)
+    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+    queue = deque(goal_cells)
+
+    # Set all cells to infinity except goal cells
+    for y in range(height):
+        for x in range(width):
+            if (x, y) not in goal_cells:
+                maze[y][x] = float('inf')
+
+    for gx, gy in goal_cells:
+        maze[gy][gx] = 0
+
+    while queue:
+        x, y = queue.popleft()
+        current_distance = maze[y][x]
+
+        for dx, dy in directions:
+            nx, ny = x + dx, y + dy
+            if valid_position(nx, ny, width, height):
+                if (dx == 0 and dy == 1 and horizontal_walls[y + 1][x] == 1):
+                    continue  # There's a wall to the North
+                if (dx == 1 and dy == 0 and vertical_walls[y][x + 1] == 1):
+                    continue  # There's a wall to the East
+                if (dx == 0 and dy == -1 and horizontal_walls[y][x] == 1):
+                    continue  # There's a wall to the South
+                if (dx == -1 and dy == 0 and vertical_walls[y][x] == 1):
+                    continue  # There's a wall to the West
+
+                if maze[ny][nx] == float('inf'):
+                    maze[ny][nx] = current_distance + 1
+                    queue.append((nx, ny))
+                    API.setText(nx, ny, str(int(maze[ny][nx])))
+
+    show(maze)
+
 
 def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells):
     global current_orientation  # Use the global orientation
@@ -257,47 +301,10 @@ def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_c
         x = next_x
 
     log(f"Updated position after move: ({x}, {y}), orientation: {current_orientation}")
+    scan_and_update_walls(x, y, horizontal_walls, vertical_walls)  # Scan walls after moving
     log("____________________")
     return x, y
 
-
-
-def recalculate_distances_from_goal(maze, horizontal_walls, vertical_walls, goal_cells):
-    width, height = len(maze[0]), len(maze)
-    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-    queue = deque(goal_cells)
-
-    # Set all cells to infinity except goal cells
-    for y in range(height):
-        for x in range(width):
-            if (x, y) not in goal_cells:
-                maze[y][x] = float('inf')
-
-    for gx, gy in goal_cells:
-        maze[gy][gx] = 0
-
-    while queue:
-        x, y = queue.popleft()
-        current_distance = maze[y][x]
-
-        for dx, dy in directions:
-            nx, ny = x + dx, y + dy
-            if valid_position(nx, ny, width, height):
-                if (dx, dy) == (0, 1) and horizontal_walls[y + 1][x] == 1:
-                    continue  # There's a wall to the North
-                if (dx, dy) == (1, 0) and vertical_walls[y][x + 1] == 1:
-                    continue  # There's a wall to the East
-                if (dx, dy) == (0, -1) and horizontal_walls[y][x] == 1:
-                    continue  # There's a wall to the South
-                if (dx, dy) == (-1, 0) and vertical_walls[y][x] == 1:
-                    continue  # There's a wall to the West
-
-                if maze[ny][nx] == float('inf'):
-                    maze[ny][nx] = current_distance + 1
-                    queue.append((nx, ny))
-                    API.setText(nx, ny, str(int(maze[ny][nx])))
-
-    show(maze)
 
 
 def show(maze, highlight_cells=None):
@@ -339,7 +346,7 @@ def run_flood_fill_6():
     for gx, gy in goal_cells:
         maze[gy][gx] = 0
 
-    flood_fill(maze, width, height)
+    flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls)
 
     x, y = 0, 0
     while (x, y) not in goal_cells:
@@ -350,6 +357,25 @@ def run_flood_fill_6():
         log(f"Current position: ({x}, {y}), orientation: {current_orientation}")
         x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells)
         log(f"Moved to ({x}, {y})")
+
+    log("Reached the goal. Re-flooding maze from the start point.")
+
+    # Re-flood the maze from the start point
+    start_goal = [(0, 0)]
+    flood_fill(maze, width, height, start_goal, horizontal_walls, vertical_walls)
+
+    # Move back to the start
+    while (x, y) != (0, 0):
+        log(f"Determining next move from ({x}, {y}) to return to start")
+        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, start_goal)
+        log(f"Moved to ({x}, {y})")
+
+    log("Reached the start point. Preparing for the final run to the goal.")
+
+    # Re-flood the maze from the goal cells
+    flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls)
+
+    # Implement the final run logic with path recording here (next step)
 
     log("Final distance map:")
     for row in maze[::-1]:

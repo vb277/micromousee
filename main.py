@@ -1,10 +1,10 @@
 from algorithms.dfs import run_dfs
 from algorithms.wall_follower import run_wall_follower
 from algorithms.flood_fill import run_flood_fill
-from algorithms.flood_fill_6 import run_flood_fill_6  # Import the 6x6 flood fill function
+from algorithms.flood_fill_6 import run_flood_fill_6  
 
 def main():
-    algorithm = "flood_fill"  # Change this to switch between algorithms
+    algorithm = "flood_fill_6"  
 
     if algorithm == "dfs":
         run_dfs()
