@@ -14,6 +14,12 @@ x, y = 0, 0
 horizontal_walls = [[0] * 6 for _ in range(7)]
 vertical_walls = [[0] * 7 for _ in range(6)]
 
+# Counters for statistics
+initial_run_cells = 0
+return_run_cells = 0
+final_run_cells = 0
+
+
 def log(string):
     """
     Log messages for debugging.
@@ -245,8 +251,8 @@ def recalculate_distances_from_goal(maze, horizontal_walls, vertical_walls, goal
     show(maze)
 
 
-def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells, path=None):
-    global current_orientation  # Use the global orientation
+def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells, path=None, phase="initial"):
+    global current_orientation, initial_run_cells, return_run_cells, final_run_cells  # Use the global orientation and counters
     neighbors = get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls)
     lowest_value = float('inf')
     next_x, next_y = x, y
@@ -297,6 +303,13 @@ def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_c
     API.moveForward()
     if path is not None:
         path.append((next_x, next_y))
+    if phase == "initial":
+        initial_run_cells += 1
+    elif phase == "return":
+        return_run_cells += 1
+    elif phase == "final":
+        final_run_cells += 1
+
     if next_x == x:
         y = next_y
     else:
@@ -306,7 +319,6 @@ def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_c
     scan_and_update_walls(x, y, horizontal_walls, vertical_walls)  # Scan walls after moving
     log("____________________")
     return x, y
-
 
 
 def show(maze, highlight_cells=None):
@@ -325,6 +337,8 @@ def show(maze, highlight_cells=None):
             API.setText(x, y, str(int(maze[y][x])))
 
 def run_flood_fill_6():
+    global initial_run_cells, return_run_cells, final_run_cells
+
     width, height = 6, 6  # Fixed size for the maze
     maze = [[float('inf')] * width for _ in range(height)]
     
@@ -357,7 +371,7 @@ def run_flood_fill_6():
         
         log(f"Determining next move from ({x}, {y})")
         log(f"Current position: ({x}, {y}), orientation: {current_orientation}")
-        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells)
+        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells, phase="initial")
         log(f"Moved to ({x}, {y})")
 
     log("Reached the goal. Re-flooding maze from the start point.")
@@ -369,7 +383,7 @@ def run_flood_fill_6():
     # Move back to the start
     while (x, y) != (0, 0):
         log(f"Determining next move from ({x}, {y}) to return to start")
-        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, start_goal)
+        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, start_goal, phase="return")
         log(f"Moved to ({x}, {y})")
 
     log("Reached the start point. Preparing for the final run to the goal.")
@@ -385,7 +399,7 @@ def run_flood_fill_6():
         
         log(f"Determining next move from ({x}, {y}) with path recording")
         log(f"Current position: ({x}, {y}), orientation: {current_orientation}")
-        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells, path)
+        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells, path, phase="final")
         log(f"Moved to ({x}, {y})")
 
     log(f"Path to goal: {path}")
@@ -396,6 +410,9 @@ def run_flood_fill_6():
 
     # Log stats at the end of the run
     log_stats()
+    log(f"Cells traversed in initial run: {initial_run_cells}")
+    log(f"Cells traversed in return run: {return_run_cells}")
+    log(f"Cells traversed in final run: {final_run_cells}")
 
 if __name__ == "__main__":
     run_flood_fill_6()
