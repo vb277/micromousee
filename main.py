@@ -4,7 +4,7 @@ from algorithms.flood_fill import run_flood_fill
 from algorithms.flood_fill_6 import run_flood_fill_6  
 
 def main():
-    algorithm = "flood_fill_6"  
+    algorithm = "flood_fill"  
 
     if algorithm == "dfs":
         run_dfs()
