@@ -1,10 +1,12 @@
 from algorithms.dfs import run_dfs
 from algorithms.wall_follower import run_wall_follower
 from algorithms.flood_fill import run_flood_fill
-from algorithms.flood_fill_6 import run_flood_fill_6  
+from algorithms.flood_fill_6 import run_flood_fill_6
+from algorithms.ff_manhattan_6 import run_ff_manhattan_6
+from algorithms.ff_manhattan import run_ff_manhattan
 
 def main():
-    algorithm = "flood_fill"  
+    algorithm = "ff_manhattan"  
 
     if algorithm == "dfs":
         run_dfs()
@@ -14,6 +16,10 @@ def main():
         run_flood_fill()
     elif algorithm == "flood_fill_6":
         run_flood_fill_6()
+    elif algorithm == "ff_manhattan_6":
+        run_ff_manhattan_6()
+    elif algorithm == "ff_manhattan":
+        run_ff_manhattan()
 
 if __name__ == "__main__":
     main()

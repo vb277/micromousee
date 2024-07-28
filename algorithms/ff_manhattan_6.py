@@ -1,5 +1,6 @@
 import API
 import sys
+import heapq
 from collections import deque
 
 NORTH = 0
@@ -11,13 +12,14 @@ current_orientation = NORTH
 
 x, y = 0, 0
 
-horizontal_walls = [[0] * 16 for _ in range(17)]
-vertical_walls = [[0] * 17 for _ in range(16)]
+horizontal_walls = [[0] * 6 for _ in range(7)]
+vertical_walls = [[0] * 7 for _ in range(6)]
 
 # Counters for statistics
 initial_run_cells = 0
 return_run_cells = 0
 final_run_cells = 0
+
 
 def log(string):
     """
@@ -25,6 +27,7 @@ def log(string):
     """
     sys.stderr.write("{}\n".format(string))
     sys.stderr.flush()
+
 
 def log_stats():
     stats = [
@@ -35,6 +38,7 @@ def log_stats():
     for stat in stats:
         value = API.getStat(stat)
         log(f"{stat}: {value}")
+
 
 def turn_left():
     global current_orientation
@@ -58,32 +62,40 @@ def turn_around():
 def valid_position(x, y, width, height):
     return 0 <= x < width and 0 <= y < height
 
-def flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls):
+def flood_fill_with_heuristic(maze, width, height, goal_cells, horizontal_walls, vertical_walls):
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-    queue = deque(goal_cells)
+    priority_queue = []
 
     for gx, gy in goal_cells:
         maze[gy][gx] = 0
+        heapq.heappush(priority_queue, (0, gx, gy))
 
-    while queue:
-        x, y = queue.popleft()
-        current_distance = maze[y][x]
+    while priority_queue:
+        current_distance, x, y = heapq.heappop(priority_queue)
         
         if current_distance != float('inf'):
             API.setText(x, y, str(int(current_distance)))
 
         for dx, dy in directions:
             nx, ny = x + dx, y + dy
-            if valid_position(nx, ny, width, height) and maze[ny][nx] == float('inf'):
+            if valid_position(nx, ny, width, height):
                 if not ((dx == 0 and dy == 1 and horizontal_walls[y + 1][x]) or
                         (dx == 1 and dy == 0 and vertical_walls[y][x + 1]) or
                         (dx == 0 and dy == -1 and horizontal_walls[y][x]) or
                         (dx == -1 and dy == 0 and vertical_walls[y][x])):
-                    maze[ny][nx] = current_distance + 1
-                    queue.append((nx, ny))
+                    tentative_distance = current_distance + 1
+                    manhattan_distance = heuristic_manhattan(nx, ny, goal_cells)
+                    combined_distance = tentative_distance + manhattan_distance
+                    if combined_distance < maze[ny][nx]:
+                        maze[ny][nx] = combined_distance
+                        heapq.heappush(priority_queue, (combined_distance, nx, ny))
+                        log(f"Updated cell ({nx}, {ny}) with combined distance {combined_distance}")
 
-    # Show the initial flood fill result
     show(maze)
+
+def heuristic_manhattan(x, y, goal_cells):
+    return min(abs(x - gx) + abs(y - gy) for gx, gy in goal_cells)
+
 
 def check_wall(direction):
     actual_direction = (current_orientation + direction) % 4
@@ -112,7 +124,7 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
             horizontal_walls[y + 1][x] = 1
             API.setWall(x, y, 'n')
             log(f"Added wall in cell ({x}, {y}, N)")
-            if valid_position(x, y + 1, 16, 16):
+            if valid_position(x, y + 1, 6, 6):
                 API.setWall(x, y + 1, 's')
                 log(f"Added wall in cell ({x}, {y + 1}, S)")
     elif actual_direction == 1:  # EAST
@@ -120,7 +132,7 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
             vertical_walls[y][x + 1] = 1
             API.setWall(x, y, 'e')
             log(f"Added wall in cell ({x}, {y}, E)")
-            if valid_position(x + 1, y, 16, 16):
+            if valid_position(x + 1, y, 6, 6):
                 API.setWall(x + 1, y, 'w')
                 log(f"Added wall in cell ({x + 1}, {y}, W)")
     elif actual_direction == 2:  # SOUTH
@@ -128,7 +140,7 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
             horizontal_walls[y][x] = 1
             API.setWall(x, y, 's')
             log(f"Added wall in cell ({x}, {y}, S)")
-            if valid_position(x, y - 1, 16, 16):
+            if valid_position(x, y - 1, 6, 6):
                 API.setWall(x, y - 1, 'n')
                 log(f"Added wall in cell ({x}, {y - 1}, N)")
     elif actual_direction == 3:  # WEST
@@ -136,7 +148,7 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
             vertical_walls[y][x] = 1
             API.setWall(x, y, 'w')
             log(f"Added wall in cell ({x}, {y}, W)")
-            if valid_position(x - 1, y, 16, 16):
+            if valid_position(x - 1, y, 6, 6):
                 API.setWall(x - 1, y, 'e')
                 log(f"Added wall in cell ({x - 1}, {y}, E)")
 
@@ -150,7 +162,7 @@ def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
     log(f"Scanned walls at ({x}, {y}), orientation: {current_orientation}")
 
 def can_move(x, y, direction, maze, horizontal_walls, vertical_walls):
-    width, height = 16, 16  # Fixed size for the maze
+    width, height = 6, 6  # Fixed size for the maze
     current_value = maze[y][x]
     
     if direction == 0:  # NORTH
@@ -178,6 +190,7 @@ def can_move(x, y, direction, maze, horizontal_walls, vertical_walls):
             return can_move_west
         return False
     return False
+
 
 def get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls):
     """
@@ -208,44 +221,41 @@ def get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls):
     
     return neighbors
 
-def recalculate_distances_from_goal(maze, horizontal_walls, vertical_walls, goal_cells):
-    width, height = len(maze[0]), len(maze)
+def recalculate_distances_from_goal_with_heuristic(maze, width, height, goal_cells, horizontal_walls, vertical_walls):
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-    queue = deque(goal_cells)
+    priority_queue = []
 
-    # Set all cells to infinity except goal cells
     for y in range(height):
         for x in range(width):
-            if (x, y) not in goal_cells:
-                maze[y][x] = float('inf')
+            maze[y][x] = float('inf')
 
     for gx, gy in goal_cells:
         maze[gy][gx] = 0
+        heapq.heappush(priority_queue, (0, gx, gy))
 
-    while queue:
-        x, y = queue.popleft()
-        current_distance = maze[y][x]
+    while priority_queue:
+        current_distance, x, y = heapq.heappop(priority_queue)
 
         for dx, dy in directions:
             nx, ny = x + dx, y + dy
             if valid_position(nx, ny, width, height):
-                if (dx == 0 and dy == 1 and horizontal_walls[y + 1][x] == 1):
-                    continue  # There's a wall to the North
-                if (dx == 1 and dy == 0 and vertical_walls[y][x + 1] == 1):
-                    continue  # There's a wall to the East
-                if (dx == 0 and dy == -1 and horizontal_walls[y][x] == 1):
-                    continue  # There's a wall to the South
-                if (dx == -1 and dy == 0 and vertical_walls[y][x] == 1):
-                    continue  # There's a wall to the West
-
-                if maze[ny][nx] == float('inf'):
-                    maze[ny][nx] = current_distance + 1
-                    queue.append((nx, ny))
-                    API.setText(nx, ny, str(int(maze[ny][nx])))
-
+                if not ((dx == 0 and dy == 1 and horizontal_walls[y + 1][x]) or
+                        (dx == 1 and dy == 0 and vertical_walls[y][x + 1]) or
+                        (dx == 0 and dy == -1 and horizontal_walls[y][x]) or
+                        (dx == -1 and dy == 0 and vertical_walls[y][x])):
+                    tentative_distance = current_distance + 1
+                    manhattan_distance = heuristic_manhattan(nx, ny, goal_cells)
+                    combined_distance = tentative_distance + manhattan_distance
+                    if combined_distance < maze[ny][nx]:
+                        maze[ny][nx] = combined_distance
+                        heapq.heappush(priority_queue, (combined_distance, nx, ny))
+                        log(f"Updated cell ({nx}, {ny}) with combined distance {combined_distance}")
+    
     show(maze)
 
-def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells, path=None, phase="initial"):
+
+
+def move_to_lowest_neighbor_with_heuristic(x, y, maze, horizontal_walls, vertical_walls, goal_cells, path=None, phase="initial"):
     global current_orientation, initial_run_cells, return_run_cells, final_run_cells  # Use the global orientation and counters
     neighbors = get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls)
     lowest_value = float('inf')
@@ -260,7 +270,7 @@ def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_c
 
     if lowest_value >= maze[y][x]:
         log(f"Stuck at ({x}, {y}). Recalculating distances.")
-        recalculate_distances_from_goal(maze, horizontal_walls, vertical_walls, goal_cells)
+        recalculate_distances_from_goal_with_heuristic(maze, 6, 6, goal_cells, horizontal_walls, vertical_walls)
         neighbors = get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls)  # Re-evaluate neighbors after recalculating distances
         lowest_value = float('inf')
         for nx, ny in neighbors:
@@ -303,7 +313,7 @@ def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_c
         return_run_cells += 1
     elif phase == "final":
         final_run_cells += 1
-        API.setColor(next_x, next_y, 'G')  # Light up the cell with color 'G' (Green) during the final run
+        API.setColor(next_x, next_y, 'G')  # Highlight the cell with color 'G' only during the final run
 
     if next_x == x:
         y = next_y
@@ -314,6 +324,7 @@ def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_c
     scan_and_update_walls(x, y, horizontal_walls, vertical_walls)  # Scan walls after moving
     log("____________________")
     return x, y
+
 
 
 def show(maze, highlight_cells=None):
@@ -331,15 +342,15 @@ def show(maze, highlight_cells=None):
             # Update the distance value in the simulator
             API.setText(x, y, str(int(maze[y][x])))
 
-def run_flood_fill():
+def run_ff_manhattan_6():
     global initial_run_cells, return_run_cells, final_run_cells
 
-    width, height = 16, 16  # Fixed size for the maze
+    width, height = 6, 6  # Fixed size for the maze
     maze = [[float('inf')] * width for _ in range(height)]
     
     # Initialize internal wall representations with boundary walls
-    horizontal_walls = [[0] * 16 for _ in range(17)]
-    vertical_walls = [[0] * 17 for _ in range(16)]
+    horizontal_walls = [[0] * 6 for _ in range(7)]
+    vertical_walls = [[0] * 7 for _ in range(6)]
     for i in range(width):
         horizontal_walls[0][i] = 1
         horizontal_walls[height][i] = 1
@@ -353,11 +364,11 @@ def run_flood_fill():
 
     log("Boundary walls initialized.")
 
-    goal_cells = [(7, 7), (8, 7), (7, 8), (8, 8)]
+    goal_cells = [(2, 2), (3, 2), (2, 3), (3, 3)]
     for gx, gy in goal_cells:
         maze[gy][gx] = 0
 
-    flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls)
+    flood_fill_with_heuristic(maze, width, height, goal_cells, horizontal_walls, vertical_walls)
 
     x, y = 0, 0
     while (x, y) not in goal_cells:
@@ -366,25 +377,25 @@ def run_flood_fill():
         
         log(f"Determining next move from ({x}, {y})")
         log(f"Current position: ({x}, {y}), orientation: {current_orientation}")
-        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells, phase="initial")
+        x, y = move_to_lowest_neighbor_with_heuristic(x, y, maze, horizontal_walls, vertical_walls, goal_cells, phase="initial")
         log(f"Moved to ({x}, {y})")
 
     log("Reached the goal. Re-flooding maze from the start point.")
 
     # Re-flood the maze from the start point
     start_goal = [(0, 0)]
-    flood_fill(maze, width, height, start_goal, horizontal_walls, vertical_walls)
+    flood_fill_with_heuristic(maze, width, height, start_goal, horizontal_walls, vertical_walls)
 
     # Move back to the start
     while (x, y) != (0, 0):
         log(f"Determining next move from ({x}, {y}) to return to start")
-        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, start_goal, phase="return")
+        x, y = move_to_lowest_neighbor_with_heuristic(x, y, maze, horizontal_walls, vertical_walls, start_goal, phase="return")
         log(f"Moved to ({x}, {y})")
 
     log("Reached the start point. Preparing for the final run to the goal.")
 
     # Re-flood the maze from the goal cells
-    flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls)
+    flood_fill_with_heuristic(maze, width, height, goal_cells, horizontal_walls, vertical_walls)
 
     # Final run to the goal with path recording
     path = [(0, 0)]  # Start recording from the initial position
@@ -394,7 +405,7 @@ def run_flood_fill():
         
         log(f"Determining next move from ({x}, {y}) with path recording")
         log(f"Current position: ({x}, {y}), orientation: {current_orientation}")
-        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells, path, phase="final")
+        x, y = move_to_lowest_neighbor_with_heuristic(x, y, maze, horizontal_walls, vertical_walls, goal_cells, path, phase="final")
         log(f"Moved to ({x}, {y})")
 
     log(f"Path to goal: {path}")
@@ -410,4 +421,4 @@ def run_flood_fill():
     log(f"Cells traversed in final run: {final_run_cells}")
 
 if __name__ == "__main__":
-    run_flood_fill()
+    run_ff_manhattan()
