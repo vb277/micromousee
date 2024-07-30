@@ -271,8 +271,14 @@ def move_to_lowest_neighbor_with_heuristic(x, y, maze, horizontal_walls, vertica
 
     log(f"Moving from ({x}, {y}) to ({next_x}, {next_y}) with value {lowest_value}")
     show(maze, highlight_cells=[(x, y), (next_x, next_y)])
-    if phase == "final":
-        API.setColor(next_x, next_y, 'G')  # Highlight the cell with color 'G' only during the final run
+
+    # Set color based on the phase
+    if phase == "initial":
+        API.setColor(x, y, 'y')  # Yellow for the first run
+    elif phase == "return":
+        API.setColor(x, y, 'b')  # Blue for the return run
+    elif phase == "final":
+        API.setColor(x, y, 'g')  # Green for the second run
 
     # Determine the direction to move based on next_x and next_y
     target_orientation = current_orientation
@@ -306,15 +312,13 @@ def move_to_lowest_neighbor_with_heuristic(x, y, maze, horizontal_walls, vertica
     elif phase == "final":
         final_run_cells += 1
 
-    if next_x == x:
-        y = next_y
-    else:
-        x = next_x
+    x, y = next_x, next_y  # Update position
 
     log(f"Updated position after move: ({x}, {y}), orientation: {current_orientation}")
     scan_and_update_walls(x, y, horizontal_walls, vertical_walls)  # Scan walls after moving
     log("____________________")
     return x, y
+
 
 def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
     directions = [0, 1, 3]  # NORTH, EAST, WEST
@@ -375,7 +379,6 @@ def run_ff_manhattan():
 
     x, y = 0, 0
     while (x, y) not in goal_cells:
-        log(f"Scanning and updating walls at ({x}, {y})")
         scan_and_update_walls(x, y, horizontal_walls, vertical_walls)
         
         log(f"Determining next move from ({x}, {y})")
@@ -391,6 +394,8 @@ def run_ff_manhattan():
 
     # Move back to the start
     while (x, y) != (0, 0):
+        scan_and_update_walls(x, y, horizontal_walls, vertical_walls)
+        
         log(f"Determining next move from ({x}, {y}) to return to start")
         x, y = move_to_lowest_neighbor_with_heuristic(x, y, maze, horizontal_walls, vertical_walls, start_goal, phase="return")
         log(f"Moved to ({x}, {y})")
@@ -403,7 +408,6 @@ def run_ff_manhattan():
     # Final run to the goal with path recording
     path = [(0, 0)]  # Start recording from the initial position
     while (x, y) not in goal_cells:
-        log(f"Scanning and updating walls at ({x}, {y})")
         scan_and_update_walls(x, y, horizontal_walls, vertical_walls)
         
         log(f"Determining next move from ({x}, {y}) with path recording")

@@ -278,6 +278,14 @@ def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_c
     log(f"Moving from ({x}, {y}) to ({next_x}, {next_y}) with value {lowest_value}")
     show(maze, highlight_cells=[(x, y), (next_x, next_y)])
 
+    # Set color based on the phase
+    if phase == "initial":
+        API.setColor(x, y, 'y')  # Yellow for the first run
+    elif phase == "return":
+        API.setColor(x, y, 'b')  # Blue for the return run
+    elif phase == "final":
+        API.setColor(x, y, 'g')  # Green for the second run
+
     # Determine the direction to move based on next_x and next_y
     target_orientation = current_orientation
     if next_x == x and next_y == y + 1:  # Move North
@@ -310,10 +318,7 @@ def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_c
     elif phase == "final":
         final_run_cells += 1
 
-    if next_x == x:
-        y = next_y
-    else:
-        x = next_x
+    x, y = next_x, next_y  # Update position
 
     log(f"Updated position after move: ({x}, {y}), orientation: {current_orientation}")
     scan_and_update_walls(x, y, horizontal_walls, vertical_walls)  # Scan walls after moving
