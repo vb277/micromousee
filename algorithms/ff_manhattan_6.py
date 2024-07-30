@@ -326,7 +326,6 @@ def move_to_lowest_neighbor_with_heuristic(x, y, maze, horizontal_walls, vertica
     return x, y
 
 
-
 def show(maze, highlight_cells=None):
     """
     Update the simulator display with the current distance values.
@@ -340,7 +339,10 @@ def show(maze, highlight_cells=None):
     for y in range(height):
         for x in range(width):
             # Update the distance value in the simulator
-            API.setText(x, y, str(int(maze[y][x])))
+            if maze[y][x] == float('inf'):
+                API.setText(x, y, 'inf')
+            else:
+                API.setText(x, y, str(int(maze[y][x])))
 
 def run_ff_manhattan_6():
     global initial_run_cells, return_run_cells, final_run_cells

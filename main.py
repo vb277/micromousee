@@ -6,7 +6,7 @@ from algorithms.ff_manhattan_6 import run_ff_manhattan_6
 from algorithms.ff_manhattan import run_ff_manhattan
 
 def main():
-    algorithm = "ff_manhattan"  
+    algorithm = "ff_manhattan_6"  
 
     if algorithm == "dfs":
         run_dfs()
