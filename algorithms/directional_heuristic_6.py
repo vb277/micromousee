@@ -62,25 +62,6 @@ def turn_around():
 def valid_position(x, y, width, height):
     return 0 <= x < width and 0 <= y < height
 
-def preferred_direction(x, y, goal_cells):
-    min_distance = float('inf')
-    preferred_dir = None
-    for gx, gy in goal_cells:
-        distance = abs(x - gx) + abs(y - gy)
-        if distance < min_distance:
-            min_distance = distance
-            if x < gx:
-                preferred_dir = EAST
-            elif x > gx:
-                preferred_dir = WEST
-            elif y < gy:
-                preferred_dir = NORTH
-            elif y > gy:
-                preferred_dir = SOUTH
-    log(f"Preferred direction for ({x}, {y}): {preferred_dir}")
-    return preferred_dir
-
-
 def flood_fill_with_heuristic(maze, width, height, goal_cells, horizontal_walls, vertical_walls):
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
     priority_queue = []
@@ -112,44 +93,47 @@ def flood_fill_with_heuristic(maze, width, height, goal_cells, horizontal_walls,
 
     show(maze)
 
-def recalculate_distances_from_goal_with_directional_heuristic(maze, width, height, goal_cells, horizontal_walls, vertical_walls):
-    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
-    priority_queue = []
-
-    for y in range(height):
-        for x in range(width):
-            maze[y][x] = float('inf')
-
-    for gx, gy in goal_cells:
-        maze[gy][gx] = 0
-        heapq.heappush(priority_queue, (0, gx, gy))
-
-    while priority_queue:
-        current_distance, x, y = heapq.heappop(priority_queue)
-
-        preferred_dir = preferred_direction(x, y, goal_cells)
-
-        for i, (dx, dy) in enumerate(directions):
-            nx, ny = x + dx, y + dy
-            if valid_position(nx, ny, width, height):
-                if not ((dx == 0 and dy == 1 and horizontal_walls[y + 1][x]) or
-                        (dx == 1 and dy == 0 and vertical_walls[y][x + 1]) or
-                        (dx == 0 and dy == -1 and horizontal_walls[y][x]) or
-                        (dx == -1 and dy == 0 and vertical_walls[y][x])):
-                    tentative_distance = current_distance + 1
-                    manhattan_distance = heuristic_manhattan(nx, ny, goal_cells)
-                    direction_penalty = 0 if i == preferred_dir else 1
-                    combined_distance = tentative_distance + manhattan_distance + direction_penalty
-                    log(f"Recalculate - Direction: {i}, Penalty: {direction_penalty}, Combined Distance: {combined_distance}")
-                    if combined_distance < maze[ny][nx]:
-                        maze[ny][nx] = combined_distance
-                        heapq.heappush(priority_queue, (combined_distance, nx, ny))
-                        log(f"Recalculated cell ({nx}, {ny}) with combined distance {combined_distance}")
-
-    show(maze)
-
 def heuristic_manhattan(x, y, goal_cells):
     return min(abs(x - gx) + abs(y - gy) for gx, gy in goal_cells)
+
+def direction_cost(current_orientation, current_x, current_y, next_x, next_y, goal_cells):
+    min_dir_cost = float('inf')
+    
+    for goal_x, goal_y in goal_cells:
+        if abs(goal_x - current_x) > abs(goal_y - current_y):
+            if next_x > current_x:
+                target_direction = EAST
+            elif next_x < current_x:
+                target_direction = WEST
+            else:
+                target_direction = current_orientation
+        else:
+            if next_y > current_y:
+                target_direction = NORTH
+            elif next_y < current_y:
+                target_direction = SOUTH
+            else:
+                target_direction = current_orientation
+        
+        # Calculate the turn cost
+        turn_cost = 0
+        if target_direction != current_orientation:
+            if (target_direction - current_orientation) % 4 == 1:
+                turn_cost = 1  # Right turn
+            elif (target_direction - current_orientation) % 4 == 3:
+                turn_cost = 1  # Left turn
+            elif (target_direction - current_orientation) % 4 == 2:
+                turn_cost = 2  # U-turn
+        
+        # Calculate the direction cost as the Manhattan distance plus the turn cost
+        dir_cost = abs(goal_x - next_x) + abs(goal_y - next_y) + turn_cost
+        
+        # Choose the minimum direction cost among all goal cells
+        if dir_cost < min_dir_cost:
+            min_dir_cost = dir_cost
+    
+    return min_dir_cost
+
 
 
 def check_wall(direction):
@@ -162,6 +146,17 @@ def check_wall(direction):
         return API.wallLeft()
 
 def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
+    """
+    Update the internal map with the detected walls and print debug statements.
+    
+    Args:
+    x (int): The x-coordinate of the current cell.
+    y (int): The y-coordinate of the current cell.
+    direction (int): The direction of the wall (0 = NORTH, 1 = EAST, 2 = SOUTH, 3 = WEST).
+    has_wall (bool): True if there is a wall, False otherwise.
+    horizontal_walls (list): 2D list representing horizontal walls.
+    vertical_walls (list): 2D list representing vertical walls.
+    """
     actual_direction = (current_orientation + direction) % 4
     if actual_direction == 0:  # NORTH
         if has_wall:
@@ -237,6 +232,19 @@ def can_move(x, y, direction, maze, horizontal_walls, vertical_walls):
 
 
 def get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls):
+    """
+    Get accessible neighboring cells from the current position using the can_move function.
+    
+    Args:
+    x (int): The x-coordinate of the current cell.
+    y (int): The y-coordinate of the current cell.
+    maze (list): 2D list representing the maze distances.
+    horizontal_walls (list): 2D list representing horizontal walls.
+    vertical_walls (list): 2D list representing vertical walls.
+    
+    Returns:
+    list: A list of accessible neighboring cells as (x, y) tuples.
+    """
     neighbors = []
     
     for direction in range(4):
@@ -252,50 +260,91 @@ def get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls):
     
     return neighbors
 
-def determine_direction(x, y, nx, ny):
-    if nx == x and ny == y + 1:
-        return NORTH
-    elif nx == x + 1 and ny == y:
-        return EAST
-    elif nx == x and ny == y - 1:
-        return SOUTH
-    elif nx == x - 1 and ny == y:
-        return WEST
-    return None
+def recalculate_distances_from_goal_with_heuristic(maze, width, height, goal_cells, horizontal_walls, vertical_walls):
+    directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
+    priority_queue = []
 
-def move_to_lowest_neighbor_with_directional_heuristic(x, y, maze, horizontal_walls, vertical_walls, goal_cells, path=None, phase="initial"):
+    for y in range(height):
+        for x in range(width):
+            maze[y][x] = float('inf')
+
+    for gx, gy in goal_cells:
+        maze[gy][gx] = 0
+        heapq.heappush(priority_queue, (0, gx, gy))
+
+    while priority_queue:
+        current_distance, x, y = heapq.heappop(priority_queue)
+
+        for dx, dy in directions:
+            nx, ny = x + dx, y + dy
+            if valid_position(nx, ny, width, height):
+                if not ((dx == 0 and dy == 1 and horizontal_walls[y + 1][x]) or
+                        (dx == 1 and dy == 0 and vertical_walls[y][x + 1]) or
+                        (dx == 0 and dy == -1 and horizontal_walls[y][x]) or
+                        (dx == -1 and dy == 0 and vertical_walls[y][x])):
+                    tentative_distance = current_distance + 1
+                    manhattan_distance = heuristic_manhattan(nx, ny, goal_cells)
+                    combined_distance = tentative_distance + manhattan_distance
+                    if combined_distance < maze[ny][nx]:
+                        maze[ny][nx] = combined_distance
+                        heapq.heappush(priority_queue, (combined_distance, nx, ny))
+                        log(f"Updated cell ({nx}, {ny}) with combined distance {combined_distance}")
+    
+    show(maze)
+
+
+
+def move_to_lowest_neighbor_with_heuristic(x, y, maze, horizontal_walls, vertical_walls, goal_cells, path=None, phase="initial"):
     global current_orientation, initial_run_cells, return_run_cells, final_run_cells  # Use the global orientation and counters
     neighbors = get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls)
     lowest_value = float('inf')
     next_x, next_y = x, y
 
     log(f"Evaluating neighbors for move from ({x}, {y}): {neighbors}")
-    preferred_dir = preferred_direction(x, y, goal_cells)
-    for nx, ny in neighbors:
-        direction = determine_direction(x, y, nx, ny)
-        direction_penalty = 0 if direction == preferred_dir else 1
-        combined_value = maze[ny][nx] + direction_penalty
-        log(f"Neighbor ({nx}, {ny}) has value {maze[ny][nx]}, Direction: {direction}, Penalty: {direction_penalty}, Combined Value: {combined_value}")
-        if combined_value < lowest_value:
-            lowest_value = combined_value
-            next_x, next_y = nx, ny
-
-    if lowest_value >= maze[y][x]:
-        log(f"Stuck at ({x}, {y}). Recalculating distances.")
-        recalculate_distances_from_goal_with_directional_heuristic(maze, 6, 6, goal_cells, horizontal_walls, vertical_walls)
-        neighbors = get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls)  # Re-evaluate neighbors after recalculating distances
-        lowest_value = float('inf')
+    
+    if len(neighbors) == 1:
+        # Only one neighbor, no need to calculate direction cost
+        next_x, next_y = neighbors[0]
+        log(f"Only one neighbor ({next_x}, {next_y}) with value {maze[next_y][next_x]}")
+    else:
         for nx, ny in neighbors:
-            direction = determine_direction(x, y, nx, ny)
-            direction_penalty = 0 if direction == preferred_dir else 1
-            combined_value = maze[ny][nx] + direction_penalty
-            log(f"Neighbor ({nx}, {ny}) has value {maze[ny][nx]}, Direction: {direction}, Penalty: {direction_penalty}, Combined Value: {combined_value}")
+            neighbor_value = maze[ny][nx]
+            dir_cost = direction_cost(current_orientation, x, y, nx, ny, goal_cells)
+            combined_value = neighbor_value + dir_cost
+            log(f"Neighbor ({nx}, {ny}) has value {neighbor_value} and direction cost {dir_cost}, combined value {combined_value}")
             if combined_value < lowest_value:
                 lowest_value = combined_value
                 next_x, next_y = nx, ny
 
+    if lowest_value >= maze[y][x]:
+        log(f"Stuck at ({x}, {y}). Recalculating distances.")
+        recalculate_distances_from_goal_with_heuristic(maze, 6, 6, goal_cells, horizontal_walls, vertical_walls)
+        neighbors = get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls)
+        lowest_value = float('inf')
+        
+        if len(neighbors) == 1:
+            next_x, next_y = neighbors[0]
+            log(f"Only one neighbor ({next_x}, {next_y}) with value {maze[next_y][next_x]}")
+        else:
+            for nx, ny in neighbors:
+                neighbor_value = maze[ny][nx]
+                dir_cost = direction_cost(current_orientation, x, y, nx, ny, goal_cells)
+                combined_value = neighbor_value + dir_cost
+                log(f"Neighbor ({nx}, {ny}) has value {neighbor_value} and direction cost {dir_cost}, combined value {combined_value}")
+                if combined_value < lowest_value:
+                    lowest_value = combined_value
+                    next_x, next_y = nx, ny
+
     log(f"Moving from ({x}, {y}) to ({next_x}, {next_y}) with value {lowest_value}")
     show(maze, highlight_cells=[(x, y), (next_x, next_y)])
+
+    # Set color based on the phase
+    if phase == "initial":
+        API.setColor(x, y, 'y')  # Yellow for the first run
+    elif phase == "return":
+        API.setColor(x, y, 'b')  # Blue for the return run
+    elif phase == "final":
+        API.setColor(x, y, 'g')  # Green for the second run
 
     # Determine the direction to move based on next_x and next_y
     target_orientation = current_orientation
@@ -328,7 +377,6 @@ def move_to_lowest_neighbor_with_directional_heuristic(x, y, maze, horizontal_wa
         return_run_cells += 1
     elif phase == "final":
         final_run_cells += 1
-        API.setColor(next_x, next_y, 'G')  # Highlight the cell with color 'G' only during the final run
 
     if next_x == x:
         y = next_y
@@ -339,6 +387,7 @@ def move_to_lowest_neighbor_with_directional_heuristic(x, y, maze, horizontal_wa
     scan_and_update_walls(x, y, horizontal_walls, vertical_walls)  # Scan walls after moving
     log("____________________")
     return x, y
+
 
 
 def show(maze, highlight_cells=None):
@@ -353,11 +402,11 @@ def show(maze, highlight_cells=None):
     width, height = len(maze[0]), len(maze)
     for y in range(height):
         for x in range(width):
+            # Update the distance value in the simulator
             if maze[y][x] == float('inf'):
                 API.setText(x, y, 'inf')
             else:
                 API.setText(x, y, str(int(maze[y][x])))
-
 
 def run_directional_heuristic_6():
     global initial_run_cells, return_run_cells, final_run_cells
@@ -389,36 +438,40 @@ def run_directional_heuristic_6():
 
     x, y = 0, 0
     while (x, y) not in goal_cells:
-        log(f"Scanning and updating walls at ({x}, {y})")
         scan_and_update_walls(x, y, horizontal_walls, vertical_walls)
         
         log(f"Determining next move from ({x}, {y})")
         log(f"Current position: ({x}, {y}), orientation: {current_orientation}")
-        x, y = move_to_lowest_neighbor_with_directional_heuristic(x, y, maze, horizontal_walls, vertical_walls, goal_cells, phase="initial")
+        x, y = move_to_lowest_neighbor_with_heuristic(x, y, maze, horizontal_walls, vertical_walls, goal_cells, phase="initial")
         log(f"Moved to ({x}, {y})")
 
     log("Reached the goal. Re-flooding maze from the start point.")
 
+    # Re-flood the maze from the start point
     start_goal = [(0, 0)]
     flood_fill_with_heuristic(maze, width, height, start_goal, horizontal_walls, vertical_walls)
 
+    # Move back to the start
     while (x, y) != (0, 0):
+        scan_and_update_walls(x, y, horizontal_walls, vertical_walls)
+        
         log(f"Determining next move from ({x}, {y}) to return to start")
-        x, y = move_to_lowest_neighbor_with_directional_heuristic(x, y, maze, horizontal_walls, vertical_walls, start_goal, phase="return")
+        x, y = move_to_lowest_neighbor_with_heuristic(x, y, maze, horizontal_walls, vertical_walls, start_goal, phase="return")
         log(f"Moved to ({x}, {y})")
 
     log("Reached the start point. Preparing for the final run to the goal.")
 
+    # Re-flood the maze from the goal cells
     flood_fill_with_heuristic(maze, width, height, goal_cells, horizontal_walls, vertical_walls)
 
-    path = [(0, 0)]
+    # Final run to the goal with path recording
+    path = [(0, 0)]  # Start recording from the initial position
     while (x, y) not in goal_cells:
-        log(f"Scanning and updating walls at ({x}, {y})")
         scan_and_update_walls(x, y, horizontal_walls, vertical_walls)
         
         log(f"Determining next move from ({x}, {y}) with path recording")
         log(f"Current position: ({x}, {y}), orientation: {current_orientation}")
-        x, y = move_to_lowest_neighbor_with_directional_heuristic(x, y, maze, horizontal_walls, vertical_walls, goal_cells, path, phase="final")
+        x, y = move_to_lowest_neighbor_with_heuristic(x, y, maze, horizontal_walls, vertical_walls, goal_cells, path, phase="final")
         log(f"Moved to ({x}, {y})")
 
     log(f"Path to goal: {path}")
@@ -427,10 +480,11 @@ def run_directional_heuristic_6():
     for row in maze[::-1]:
         log(" ".join([str(cell) for cell in row]))
 
+    # Log stats at the end of the run
     log_stats()
     log(f"Cells traversed in initial run: {initial_run_cells}")
     log(f"Cells traversed in return run: {return_run_cells}")
     log(f"Cells traversed in final run: {final_run_cells}")
 
 if __name__ == "__main__":
-    run_directional_heuristic_6()
+    run_ff_manhattan_6()
