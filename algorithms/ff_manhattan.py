@@ -19,6 +19,7 @@ vertical_walls = [[0] * 17 for _ in range(16)]
 initial_run_cells = 0
 return_run_cells = 0
 final_run_cells = 0
+explored_cells = set()
 
 
 def log(string):
@@ -70,9 +71,7 @@ def calculate_manhattan_distances(goal_positions, maze_size):
                 manhattan_distances[i][j] = min(manhattan_distances[i][j], abs(goal[0] - i) + abs(goal[1] - j))
     return manhattan_distances
 
-
-
-def flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls):
+def flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls, explored_cells):
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
     queue = deque(goal_cells)
 
@@ -88,7 +87,7 @@ def flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls
 
         for dx, dy in directions:
             nx, ny = x + dx, y + dy
-            if valid_position(nx, ny, width, height) and maze[ny][nx] == float('inf'):
+            if valid_position(nx, ny, width, height) and (nx, ny) in explored_cells and maze[ny][nx] == float('inf'):
                 if not ((dx == 0 and dy == 1 and horizontal_walls[y + 1][x]) or
                         (dx == 1 and dy == 0 and vertical_walls[y][x + 1]) or
                         (dx == 0 and dy == -1 and horizontal_walls[y][x]) or
@@ -98,6 +97,24 @@ def flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls
 
     # Show the initial flood fill result
     show(maze)
+
+def set_virtual_walls_around_unexplored(width, height, horizontal_walls, vertical_walls, explored_cells):
+    for x in range(width):
+        for y in range(height):
+            if (x, y) not in explored_cells:
+                # Set virtual walls around unexplored cells
+                if valid_position(x, y + 1, width, height) and (x, y + 1) in explored_cells:
+                    horizontal_walls[y + 1][x] = 1
+                    API.setWall(x, y, 'n')
+                if valid_position(x + 1, y, width, height) and (x + 1, y) in explored_cells:
+                    vertical_walls[y][x + 1] = 1
+                    API.setWall(x, y, 'e')
+                if valid_position(x, y - 1, width, height) and (x, y - 1) in explored_cells:
+                    horizontal_walls[y][x] = 1
+                    API.setWall(x, y, 's')
+                if valid_position(x - 1, y, width, height) and (x - 1, y) in explored_cells:
+                    vertical_walls[y][x] = 1
+                    API.setWall(x, y, 'w')
 
 
 def check_wall(direction):
@@ -110,6 +127,17 @@ def check_wall(direction):
         return API.wallLeft()
 
 def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
+    """
+    Update the internal map with the detected walls and print debug statements.
+    
+    Args:
+    x (int): The x-coordinate of the current cell.
+    y (int): The y-coordinate of the current cell.
+    direction (int): The direction of the wall (0 = NORTH, 1 = EAST, 2 = SOUTH, 3 = WEST).
+    has_wall (bool): True if there is a wall, False otherwise.
+    horizontal_walls (list): 2D list representing horizontal walls.
+    vertical_walls (list): 2D list representing vertical walls.
+    """
     actual_direction = (current_orientation + direction) % 4
     if actual_direction == 0:  # NORTH
         if has_wall:
@@ -144,8 +172,9 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
                 API.setWall(x - 1, y, 'e')
                 log(f"Added wall in cell ({x - 1}, {y}, E)")
 
-
 def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
+    global explored_cells
+    explored_cells.add((x, y))
     directions = [0, 1, 3]  # NORTH, EAST, WEST
     log(f"Scanning walls at ({x}, {y}) with orientation {current_orientation}")
     for direction in directions:
@@ -154,8 +183,9 @@ def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
         update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls)
     log(f"Scanned walls at ({x}, {y}), orientation: {current_orientation}")
 
+
 def can_move(x, y, direction, maze, horizontal_walls, vertical_walls):
-    width, height = 6, 6  # Fixed size for the maze
+    width, height = 16, 16  # Fixed size for the maze
     current_value = maze[y][x]
     
     if direction == 0:  # NORTH
@@ -356,7 +386,7 @@ def show(maze, highlight_cells=None):
                 API.setText(x, y, str(int(maze[y][x])))
 
 def run_ff_manhattan():
-    global initial_run_cells, return_run_cells, final_run_cells
+    global initial_run_cells, return_run_cells, final_run_cells, explored_cells
 
     width, height = 16, 16  # Fixed size for the maze
     maze = [[float('inf')] * width for _ in range(height)]
@@ -380,7 +410,7 @@ def run_ff_manhattan():
     goal_cells = [(7, 7), (8, 7), (7, 8), (8, 8)]
     manhattan_distances = calculate_manhattan_distances(goal_cells, width)
     
-    flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls)
+    flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls, explored_cells)
 
     x, y = 0, 0
     while (x, y) not in goal_cells:
@@ -396,21 +426,21 @@ def run_ff_manhattan():
 
     # Re-flood the maze from the start point
     start_goal = [(0, 0)]
-    flood_fill(maze, width, height, start_goal, horizontal_walls, vertical_walls)
-
-    # Recalculate Manhattan distances to the start position
-    start_manhattan_distances = calculate_manhattan_distances([(0, 0)], width)
+    flood_fill(maze, width, height, start_goal, horizontal_walls, vertical_walls, explored_cells)
 
     # Move back to the start
     while (x, y) != (0, 0):
         log(f"Determining next move from ({x}, {y}) to return to start")
-        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, start_goal, start_manhattan_distances, phase="return")
+        x, y = move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, start_goal, manhattan_distances, phase="return")
         log(f"Moved to ({x}, {y})")
 
     log("Reached the start point. Preparing for the final run to the goal.")
 
+    # Set virtual walls around unexplored cells
+    set_virtual_walls_around_unexplored(width, height, horizontal_walls, vertical_walls, explored_cells)
+
     # Re-flood the maze from the goal cells
-    flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls)
+    flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls, explored_cells)
 
     # Final run to the goal with path recording
     path = [(0, 0)]  # Start recording from the initial position
