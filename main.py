@@ -10,7 +10,7 @@ from algorithms.directional_heuristic_6 import run_directional_heuristic_6
 # from algorithms.ff_and_m import ff_and_m
 
 def main():
-    algorithm = "ff_manhattan"  
+    algorithm = "flood_fill_6"  
 
     if algorithm == "dfs":
         run_dfs()

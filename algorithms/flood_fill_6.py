@@ -11,22 +11,20 @@ current_orientation = NORTH
 
 x, y = 0, 0
 
-horizontal_walls = [[0] * 6 for _ in range(7)]
-vertical_walls = [[0] * 7 for _ in range(6)]
+maze_width, maze_height = 6, 6
+horizontal_walls = [[0] * maze_width for _ in range(maze_height + 1)]
+vertical_walls = [[0] * (maze_width + 1) for _ in range(maze_height)]
 
 # Counters for statistics
 initial_run_cells = 0
 return_run_cells = 0
 final_run_cells = 0
 
+explored_cells = set()
 
 def log(string):
-    """
-    Log messages for debugging.
-    """
     sys.stderr.write("{}\n".format(string))
     sys.stderr.flush()
-
 
 def log_stats():
     stats = [
@@ -37,7 +35,6 @@ def log_stats():
     for stat in stats:
         value = API.getStat(stat)
         log(f"{stat}: {value}")
-
 
 def turn_left():
     global current_orientation
@@ -88,7 +85,6 @@ def flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls
     # Show the initial flood fill result
     show(maze)
 
-
 def check_wall(direction):
     actual_direction = (current_orientation + direction) % 4
     if direction == 0:  # Front
@@ -99,24 +95,13 @@ def check_wall(direction):
         return API.wallLeft()
 
 def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
-    """
-    Update the internal map with the detected walls and print debug statements.
-    
-    Args:
-    x (int): The x-coordinate of the current cell.
-    y (int): The y-coordinate of the current cell.
-    direction (int): The direction of the wall (0 = NORTH, 1 = EAST, 2 = SOUTH, 3 = WEST).
-    has_wall (bool): True if there is a wall, False otherwise.
-    horizontal_walls (list): 2D list representing horizontal walls.
-    vertical_walls (list): 2D list representing vertical walls.
-    """
     actual_direction = (current_orientation + direction) % 4
     if actual_direction == 0:  # NORTH
         if has_wall:
             horizontal_walls[y + 1][x] = 1
             API.setWall(x, y, 'n')
             log(f"Added wall in cell ({x}, {y}, N)")
-            if valid_position(x, y + 1, 6, 6):
+            if valid_position(x, y + 1, maze_width, maze_height):
                 API.setWall(x, y + 1, 's')
                 log(f"Added wall in cell ({x}, {y + 1}, S)")
     elif actual_direction == 1:  # EAST
@@ -124,7 +109,7 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
             vertical_walls[y][x + 1] = 1
             API.setWall(x, y, 'e')
             log(f"Added wall in cell ({x}, {y}, E)")
-            if valid_position(x + 1, y, 6, 6):
+            if valid_position(x + 1, y, maze_width, maze_height):
                 API.setWall(x + 1, y, 'w')
                 log(f"Added wall in cell ({x + 1}, {y}, W)")
     elif actual_direction == 2:  # SOUTH
@@ -132,7 +117,7 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
             horizontal_walls[y][x] = 1
             API.setWall(x, y, 's')
             log(f"Added wall in cell ({x}, {y}, S)")
-            if valid_position(x, y - 1, 6, 6):
+            if valid_position(x, y - 1, maze_width, maze_height):
                 API.setWall(x, y - 1, 'n')
                 log(f"Added wall in cell ({x}, {y - 1}, N)")
     elif actual_direction == 3:  # WEST
@@ -140,11 +125,13 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
             vertical_walls[y][x] = 1
             API.setWall(x, y, 'w')
             log(f"Added wall in cell ({x}, {y}, W)")
-            if valid_position(x - 1, y, 6, 6):
+            if valid_position(x - 1, y, maze_width, maze_height):
                 API.setWall(x - 1, y, 'e')
                 log(f"Added wall in cell ({x - 1}, {y}, E)")
 
 def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
+    global explored_cells
+    explored_cells.add((x, y))
     directions = [0, 1, 3]  # NORTH, EAST, WEST
     log(f"Scanning walls at ({x}, {y}) with orientation {current_orientation}")
     for direction in directions:
@@ -154,50 +141,35 @@ def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
     log(f"Scanned walls at ({x}, {y}), orientation: {current_orientation}")
 
 def can_move(x, y, direction, maze, horizontal_walls, vertical_walls):
-    width, height = 6, 6  # Fixed size for the maze
     current_value = maze[y][x]
     
     if direction == 0:  # NORTH
-        if valid_position(x, y + 1, width, height):
+        if valid_position(x, y + 1, maze_width, maze_height):
             can_move_north = horizontal_walls[y + 1][x] == 0 and maze[y + 1][x] < current_value
             log(f"Checking NORTH: can move to ({x}, {y + 1}): {can_move_north}")
             return can_move_north
         return False
     elif direction == 1:  # EAST
-        if valid_position(x + 1, y, width, height):
+        if valid_position(x + 1, y, maze_width, maze_height):
             can_move_east = vertical_walls[y][x + 1] == 0 and maze[y][x + 1] < current_value
             log(f"Checking EAST: can move to ({x + 1}, {y}): {can_move_east}")
             return can_move_east
         return False
     elif direction == 2:  # SOUTH
-        if valid_position(x, y - 1, width, height):
+        if valid_position(x, y - 1, maze_width, maze_height):
             can_move_south = horizontal_walls[y][x] == 0 and maze[y - 1][x] < current_value
             log(f"Checking SOUTH: can move to ({x}, {y - 1}): {can_move_south}")
             return can_move_south
         return False
     elif direction == 3:  # WEST
-        if valid_position(x - 1, y, width, height):
+        if valid_position(x - 1, y, maze_width, maze_height):
             can_move_west = vertical_walls[y][x] == 0 and maze[y][x - 1] < current_value
             log(f"Checking WEST: can move to ({x - 1}, {y}): {can_move_west}")
             return can_move_west
         return False
     return False
 
-
 def get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls):
-    """
-    Get accessible neighboring cells from the current position using the can_move function.
-    
-    Args:
-    x (int): The x-coordinate of the current cell.
-    y (int): The y-coordinate of the current cell.
-    maze (list): 2D list representing the maze distances.
-    horizontal_walls (list): 2D list representing horizontal walls.
-    vertical_walls (list): 2D list representing vertical walls.
-    
-    Returns:
-    list: A list of accessible neighboring cells as (x, y) tuples.
-    """
     neighbors = []
     
     for direction in range(4):
@@ -214,13 +186,12 @@ def get_accessible_neighbors(x, y, maze, horizontal_walls, vertical_walls):
     return neighbors
 
 def recalculate_distances_from_goal(maze, horizontal_walls, vertical_walls, goal_cells):
-    width, height = len(maze[0]), len(maze)
     directions = [(0, 1), (1, 0), (0, -1), (-1, 0)]
     queue = deque(goal_cells)
 
     # Set all cells to infinity except goal cells
-    for y in range(height):
-        for x in range(width):
+    for y in range(maze_height):
+        for x in range(maze_width):
             if (x, y) not in goal_cells:
                 maze[y][x] = float('inf')
 
@@ -233,7 +204,7 @@ def recalculate_distances_from_goal(maze, horizontal_walls, vertical_walls, goal
 
         for dx, dy in directions:
             nx, ny = x + dx, y + dy
-            if valid_position(nx, ny, width, height):
+            if valid_position(nx, ny, maze_width, maze_height):
                 if (dx == 0 and dy == 1 and horizontal_walls[y + 1][x] == 1):
                     continue  # There's a wall to the North
                 if (dx == 1 and dy == 0 and vertical_walls[y][x + 1] == 1):
@@ -249,7 +220,6 @@ def recalculate_distances_from_goal(maze, horizontal_walls, vertical_walls, goal
                     API.setText(nx, ny, str(int(maze[ny][nx])))
 
     show(maze)
-
 
 def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_cells, path=None, phase="initial"):
     global current_orientation, initial_run_cells, return_run_cells, final_run_cells  # Use the global orientation and counters
@@ -325,27 +295,35 @@ def move_to_lowest_neighbor(x, y, maze, horizontal_walls, vertical_walls, goal_c
     log("____________________")
     return x, y
 
+def set_virtual_walls_around_unexplored(width, height, horizontal_walls, vertical_walls, explored_cells):
+    for x in range(width):
+        for y in range(height):
+            if (x, y) not in explored_cells:
+                # Set virtual walls around unexplored cells
+                if valid_position(x, y + 1, width, height) and (x, y + 1) in explored_cells:
+                    horizontal_walls[y + 1][x] = 1
+                    API.setWall(x, y, 'n')
+                if valid_position(x + 1, y, width, height) and (x + 1, y) in explored_cells:
+                    vertical_walls[y][x + 1] = 1
+                    API.setWall(x, y, 'e')
+                if valid_position(x, y - 1, width, height) and (x, y - 1) in explored_cells:
+                    horizontal_walls[y][x] = 1
+                    API.setWall(x, y, 's')
+                if valid_position(x - 1, y, width, height) and (x - 1, y) in explored_cells:
+                    vertical_walls[y][x] = 1
+                    API.setWall(x, y, 'w')
 
 def show(maze, highlight_cells=None):
-    """
-    Update the simulator display with the current distance values.
-    Optionally highlight specific cells.
-
-    Args:
-    maze (list): The 2D list representing the maze distances.
-    highlight_cells (list): List of (x, y) tuples to highlight. Default is None.
-    """
     width, height = len(maze[0]), len(maze)
     for y in range(height):
         for x in range(width):
-            # Update the distance value in the simulator
             if maze[y][x] == float('inf'):
                 API.setText(x, y, 'inf')
             else:
                 API.setText(x, y, str(int(maze[y][x])))
 
 def run_flood_fill_6():
-    global initial_run_cells, return_run_cells, final_run_cells
+    global initial_run_cells, return_run_cells, final_run_cells, explored_cells
 
     width, height = 6, 6  # Fixed size for the maze
     maze = [[float('inf')] * width for _ in range(height)]
@@ -395,6 +373,9 @@ def run_flood_fill_6():
         log(f"Moved to ({x}, {y})")
 
     log("Reached the start point. Preparing for the final run to the goal.")
+
+    # Set virtual walls around unexplored cells
+    set_virtual_walls_around_unexplored(width, height, horizontal_walls, vertical_walls, explored_cells)
 
     # Re-flood the maze from the goal cells
     flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls)
