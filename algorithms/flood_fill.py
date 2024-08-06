@@ -18,6 +18,8 @@ vertical_walls = [[0] * 17 for _ in range(16)]
 initial_run_cells = 0
 return_run_cells = 0
 final_run_cells = 0
+explored_cells = set()
+
 
 def log(string):
     """
@@ -141,6 +143,8 @@ def update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls):
                 log(f"Added wall in cell ({x - 1}, {y}, E)")
 
 def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
+    global explored_cells
+    explored_cells.add((x, y))
     directions = [0, 1, 3]  # NORTH, EAST, WEST
     log(f"Scanning walls at ({x}, {y}) with orientation {current_orientation}")
     for direction in directions:
@@ -148,6 +152,7 @@ def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
         log(f"Checking wall in direction {direction}: {has_wall}")
         update_walls(x, y, direction, has_wall, horizontal_walls, vertical_walls)
     log(f"Scanned walls at ({x}, {y}), orientation: {current_orientation}")
+
 
 def can_move(x, y, direction, maze, horizontal_walls, vertical_walls):
     width, height = 16, 16  # Fixed size for the maze
@@ -338,8 +343,27 @@ def show(maze, highlight_cells=None):
                 API.setText(x, y, str(int(maze[y][x])))
 
 
+def set_virtual_walls_around_unexplored(width, height, horizontal_walls, vertical_walls, explored_cells):
+    for x in range(width):
+        for y in range(height):
+            if (x, y) not in explored_cells:
+                # Set virtual walls around unexplored cells
+                if valid_position(x, y + 1, width, height) and (x, y + 1) in explored_cells:
+                    horizontal_walls[y + 1][x] = 1
+                    API.setWall(x, y, 'n')
+                if valid_position(x + 1, y, width, height) and (x + 1, y) in explored_cells:
+                    vertical_walls[y][x + 1] = 1
+                    API.setWall(x, y, 'e')
+                if valid_position(x, y - 1, width, height) and (x, y - 1) in explored_cells:
+                    horizontal_walls[y][x] = 1
+                    API.setWall(x, y, 's')
+                if valid_position(x - 1, y, width, height) and (x - 1, y) in explored_cells:
+                    vertical_walls[y][x] = 1
+                    API.setWall(x, y, 'w')
+
+
 def run_flood_fill():
-    global initial_run_cells, return_run_cells, final_run_cells
+    global initial_run_cells, return_run_cells, final_run_cells, explored_cells
 
     width, height = 16, 16  # Fixed size for the maze
     maze = [[float('inf')] * width for _ in range(height)]
@@ -390,6 +414,9 @@ def run_flood_fill():
 
     log("Reached the start point. Preparing for the final run to the goal.")
 
+    # Set virtual walls around unexplored cells
+    set_virtual_walls_around_unexplored(width, height, horizontal_walls, vertical_walls, explored_cells)
+
     # Re-flood the maze from the goal cells
     flood_fill(maze, width, height, goal_cells, horizontal_walls, vertical_walls)
 
@@ -415,6 +442,7 @@ def run_flood_fill():
     log(f"Cells traversed in initial run: {initial_run_cells}")
     log(f"Cells traversed in return run: {return_run_cells}")
     log(f"Cells traversed in final run: {final_run_cells}")
+
 
 if __name__ == "__main__":
     run_flood_fill()

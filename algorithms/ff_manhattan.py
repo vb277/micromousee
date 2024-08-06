@@ -171,7 +171,7 @@ def scan_and_update_walls(x, y, horizontal_walls, vertical_walls):
 
 
 def can_move(x, y, direction, maze, horizontal_walls, vertical_walls):
-    width, height = 6, 6  # Fixed size for the maze
+    width, height = 16, 16  # Fixed size for the maze
     current_value = maze[y][x]
     
     if direction == 0:  # NORTH
