@@ -6,11 +6,10 @@ from algorithms.ff_manhattan_6 import run_ff_manhattan_6
 from algorithms.ff_manhattan import run_ff_manhattan
 from algorithms.directional_heuristic import run_directional_heuristic
 from algorithms.directional_heuristic_6 import run_directional_heuristic_6
-# from algorithms.ff_and_m_6 import ff_and_m_6
-# from algorithms.ff_and_m import ff_and_m
+from algorithms.d_lite_6 import run_d_lite_6
 
 def main():
-    algorithm = "flood_fill_6"  
+    algorithm = "dlite6"  
 
     if algorithm == "dfs":
         run_dfs()
@@ -28,10 +27,8 @@ def main():
         run_directional_heuristic()
     elif algorithm == "directional":
         run_directional_heuristic_6()
-    # elif algorithm == "ff_and_m_6":
-    #     ff_and_m_6()
-    # elif algorithm == "ff_and_m":
-    #     ff_and_m()
+    elif algorithm == "dlite6":
+        run_d_lite_6()
 
 if __name__ == "__main__":
     main()

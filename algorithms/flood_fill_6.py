@@ -2,6 +2,7 @@ import API
 import sys
 from collections import deque
 
+
 NORTH = 0
 EAST = 1
 SOUTH = 2
