@@ -48,6 +48,7 @@ def move_forward():
     log(f"Attempting to move forward. Current position: ({x}, {y}), orientation: {current_orientation}")
     API.moveForward()
 
+    # Update position based on current orientation
     if current_orientation == NORTH:
         y += 1
     elif current_orientation == EAST:
@@ -58,6 +59,7 @@ def move_forward():
         x -= 1
 
     log(f"Moved forward to ({x}, {y}). Updated position: ({x}, {y})")
+    log(f"New orientation: {current_orientation}")
 
 # D* Lite Algorithm
 class DStarLite:
@@ -273,19 +275,28 @@ def scan_and_update_walls(x, y, dstar_lite):
     if wall_detected:
         log("Wall detected; recalculating shortest path.")
         dstar_lite.compute_shortest_path()
-# Check if there is a wall in the specified direction
-def check_wall(direction):
-    actual_direction = (current_orientation + direction) % 4
-    if actual_direction == NORTH:
-        return API.wallFront()
-    elif actual_direction == EAST:
-        return API.wallRight()
-    elif actual_direction == SOUTH:
-        return API.wallBack()  # Assuming this is how the API checks for a wall behind
-    elif actual_direction == WEST:
-        return API.wallLeft()
-    return False
 
+# # Check if there is a wall in the specified direction
+# def check_wall(direction):
+#     actual_direction = (current_orientation + direction) % 4
+#     log(f"Checking wall. Current orientation: {current_orientation}, direction: {direction}, actual direction: {actual_direction}")
+#     if actual_direction == NORTH:
+#         return API.wallFront()
+#     elif actual_direction == EAST:
+#         return API.wallRight()
+#     elif actual_direction == SOUTH:
+#         return API.wallBack()  # Assuming this is how the API checks for a wall behind
+#     elif actual_direction == WEST:
+#         return API.wallLeft()
+#     return False
+def check_wall(direction):
+    log(f"Checking wall. Current orientation: {current_orientation}, direction: {direction}")
+    if direction == 0:  # Front
+        return API.wallFront()
+    elif direction == 1:  # Right
+        return API.wallRight()
+    elif direction == 3:  # Left
+        return API.wallLeft()
 # Validate if the given coordinates are within the maze bounds
 def valid_position(x, y, width, height):
     return 0 <= x < width and 0 <= y < height
@@ -370,18 +381,18 @@ def run_d_lite_6():
         while (x, y) not in goals:
             log(f"Starting loop with mouse at ({x}, {y}), current orientation: {current_orientation}.")
 
-            # Step 1: Determine and execute the next move
-            log(f"Determining and executing the next move from ({x}, {y}).")
-            x, y = move_to_next(x, y, graph, dstar_lite.g)
-
-            # Step 2: Scan for walls after moving
+            # Step 1: Scan for walls
             log(f"Mouse at ({x}, {y}), orientation: {current_orientation}. Scanning for walls.")
             scan_and_update_walls(x, y, dstar_lite)
 
-            # Step 3: Recompute the shortest path if necessary
+            # Step 2: Recompute the shortest path if necessary
             if dstar_lite.priority_queue.top_key() < dstar_lite.calculate_key(start):
                 log("Wall detected; recalculating shortest path.")
                 dstar_lite.compute_shortest_path()
+
+            # Step 3: Determine and execute the next move
+            log(f"Determining and executing the next move from ({x}, {y}).")
+            x, y = move_to_next(x, y, graph, dstar_lite.g)
 
             # Display the state of g and rhs values in the simulator
             show(dstar_lite.g, highlight_cells=[(x, y)])
@@ -391,7 +402,6 @@ def run_d_lite_6():
     except Exception as e:
         log(f"Error during D* Lite execution: {e}")
         raise  # Re-raise the exception for further investigation
-
 
 
 if __name__ == "__main__":
