@@ -61,9 +61,50 @@ def move_forward():
         y -= 1
     elif current_orientation == WEST:
         x -= 1
-
+    log("----------------------------------------------------------------")
     log(f"Moved forward to ({x}, {y}). Updated position: ({x}, {y})")
     log(f"New orientation: {current_orientation}")
+
+
+class LexicographicPriority:
+    def __init__(self, primary_key, secondary_key):
+        self.primary_key = primary_key
+        self.secondary_key = secondary_key
+
+    def __lt__(self, other):
+        if self.primary_key < other.primary_key:
+            return True
+        if self.primary_key == other.primary_key:
+            return self.secondary_key < other.secondary_key
+        return False
+
+    def __le__(self, other):
+        if self.primary_key < other.primary_key:
+            return True
+        if self.primary_key == other.primary_key:
+            return self.secondary_key <= other.secondary_key
+        return False
+
+    def __eq__(self, other):
+        return self.primary_key == other.primary_key and self.secondary_key == other.secondary_key
+    def __repr__(self):
+            return f"LexicographicPriority(primary_key={self.primary_key}, secondary_key={self.secondary_key})"
+
+
+class QueueNode:
+    def __init__(self, priority, vertex):
+        self.priority = priority
+        self.vertex = vertex
+
+    def __lt__(self, other):
+        return self.priority < other.priority
+
+    def __le__(self, other):
+        return self.priority <= other.priority
+
+    def __eq__(self, other):
+        return self.priority == other.priority
+
 
 # Class to represent the D* Lite algorithm
 class DStarLite:
@@ -89,7 +130,7 @@ class DStarLite:
             # Set the rhs value of the goal nodes to 0 (known cost to reach goal is zero)
             self.rhs[goal] = 0
             # Add the goal nodes to the priority queue with their calculated key
-            self.priority_queue.put(goal, self.calculate_key(goal))
+            self.priority_queue.insert(goal, self.calculate_key(goal))
 
         log("D* Lite initialization complete.")
         for goal in goals:
@@ -103,36 +144,44 @@ class DStarLite:
     # Calculate the priority key for a given vertex in the graph
     def calculate_key(self, vertex):
         g_rhs_min = min(self.g[vertex], self.rhs[vertex])
-        return (g_rhs_min + self.heuristic(self.start, vertex) + self.k_m, g_rhs_min)
+        return LexicographicPriority(g_rhs_min + self.heuristic(self.start, vertex) + self.k_m, g_rhs_min)
 
     # Heuristic function that uses Manhattan distance
     def heuristic(self, a, b):
         return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
-    # Update the cost estimate for a given vertex
     def update_vertex(self, vertex):
+        # Ensure vertex is a tuple and exists in g and rhs
+        if not isinstance(vertex, tuple) or vertex not in self.g:
+            log(f"Error: Vertex {vertex} is not valid or not initialized.")
+            return
+
+        log(f"Updating vertex {vertex}. Initial g = {self.g[vertex]}, rhs = {self.rhs[vertex]}")
+
         if vertex not in self.goals:
             # Recalculate rhs for this vertex based on its neighbors
             old_rhs = self.rhs[vertex]
             self.rhs[vertex] = min(
                 [self.g[neighbor] + self.graph.cost(vertex, neighbor) for neighbor in self.graph.get_neighbors(vertex)]
             )
-        
-        # Remove the vertex from the priority queue if it exists
-        self.priority_queue.remove(vertex)
-        
+            log(f"Recalculated rhs for vertex {vertex}. Old rhs = {old_rhs}, New rhs = {self.rhs[vertex]}")
+
+        # Check if the vertex is in the priority queue before removing it
+        if vertex in self.priority_queue.vertex_set:
+            log(f"Removing vertex {vertex} from the priority queue.")
+            self.priority_queue.remove(vertex)
+
         # If g != rhs, reinsert with updated priority
         if self.g[vertex] != self.rhs[vertex]:
             key = self.calculate_key(vertex)
-            self.priority_queue.put(vertex, key)
+            self.priority_queue.insert(vertex, key)
+            log(f"Reinserted vertex {vertex} with new key = ({key.primary_key}, {key.secondary_key}) into the priority queue.")
             log(f"Updated vertex {vertex}: g = {self.g[vertex]}, rhs = {self.rhs[vertex]}")
-            log(f"Added {vertex} to the priority queue with key {key}")
-            log("---------------------------------------------------")
         else:
-            log(f"Vertex {vertex} not added to queue: g = {self.g[vertex]}, rhs = {self.rhs[vertex]}")
-        
+            log(f"No update required for vertex {vertex}: g = {self.g[vertex]}, rhs = {self.rhs[vertex]}")
+
         # Log the current state of the priority queue
-        self.priority_queue.log_queue()
+        self.priority_queue.log_queue_state()
 
         # Update the display with the new rhs value in the simulator
         if self.rhs[vertex] == float('inf'):
@@ -140,35 +189,42 @@ class DStarLite:
         else:
             API.setText(vertex[0], vertex[1], str(int(self.rhs[vertex])))
 
-    # Compute the shortest path using the D* Lite algorithm
+
     def compute_shortest_path(self):
         log("Starting to compute the shortest path...")
-        # Process nodes in the priority queue
-        while not self.priority_queue.empty() and (self.priority_queue.top_key() < self.calculate_key(self.start) or self.rhs[self.start] != self.g[self.start]):
-            u = self.priority_queue.get()
-            log(f"Processing node {u} with g[{u}] = {self.g[u]} and rhs[{u}] = {self.rhs[u]}")
-            self.priority_queue.log_queue()
+        
+        while not self.priority_queue.is_empty() and (self.priority_queue.peek_priority() < self.calculate_key(self.start) or self.rhs[self.start] != self.g[self.start]):
+            u = self.priority_queue.extract_min()
+            log(f"Popping node {u} with g[{u}] = {self.g[u]} and rhs[{u}] = {self.rhs[u]} from the priority queue")
+            self.priority_queue.log_queue_state()
 
             if self.g[u] > self.rhs[u]:  # Overconsistent case
+                log(f"Node {u} is overconsistent. g[{u}] > rhs[{u}]. Updating g[{u}] to rhs[{u}]")
                 self.g[u] = self.rhs[u]  # Relax the g value
                 for s in self.graph.get_neighbors(u):  # Update neighbors
-                    log("-----------------------------------------")
-                    log(f"Before updating rhs[{s}] = {self.rhs[s]}")
+                    log("----------------------------------------------------------------")
+                    log(f"Updating neighbor {s} of node {u} before rhs[{s}] = {self.rhs[s]}")
                     self.update_vertex(s)
-                    log(f"After updating rhs[{s}] = {self.rhs[s]}")
+                    log(f"Updated neighbor {s} of node {u} after rhs[{s}] = {self.rhs[s]}")
+                    log("----------------------------------------------------------------")
             else:  # Underconsistent case
+                log(f"Node {u} is underconsistent. Setting g[{u}] to infinity.")
                 self.g[u] = float('inf')
                 self.update_vertex(u)
                 for s in self.graph.get_neighbors(u):
-                    log(f"Before updating rhs[{s}] = {self.rhs[s]}")
+                    log(f"Updating neighbor {s} of node {u} before rhs[{s}] = {self.rhs[s]}")
                     self.update_vertex(s)
-                    log(f"After updating rhs[{s}] = {self.rhs[s]}")
+                    log(f"Updated neighbor {s} of node {u} after rhs[{s}] = {self.rhs[s]}")
 
-            log(f"Updated node {u} with new g[{u}] = {self.g[u]} and rhs[{u}] = {self.rhs[u]}")
+            log(f"Finished processing node {u} with new g[{u}] = {self.g[u]} and rhs[{u}] = {self.rhs[u]}")
+            log(f"=======================================================================================")
 
         log("Shortest path computation complete.")
+        
+        # Display the g and rhs values and highlight the priority queue cells in the simulator
+        show(self.g, self.rhs, self.priority_queue)
 
-# Class to represent the structure of the maze as a graph
+
 class MazeGraph:
     def __init__(self, width, height):
         self.width = width
@@ -226,49 +282,114 @@ class MazeGraph:
 
     # Get all nodes in the graph
     def get_all_nodes(self):
-        return self.graph.keys()
+        return list(self.graph.keys())
 
-# Class to implement a priority queue for managing nodes in D* Lite
+
+
 class PriorityQueue:
     def __init__(self):
-        self.elements = []
+        self.heap = []
+        self.vertex_set = set()
 
-    # Check if the queue is empty
-    def empty(self):
-        return len(self.elements) == 0
+    def peek(self):
+        return self.heap[0].vertex
 
-    # Insert an item with a given priority
-    def put(self, item, priority):
-        heapq.heappush(self.elements, (priority, item))
+    def peek_priority(self):
+        if len(self.heap) == 0:
+            return LexicographicPriority(float('inf'), float('inf'))
+        return self.heap[0].priority
 
-    # Get the item with the highest priority
-    def get(self):
-        return heapq.heappop(self.elements)[1]
+    def extract_min(self):
+        item = heapq.heappop(self.heap)
+        self.vertex_set.remove(item.vertex)
+        return item.vertex
 
-    # Peek at the highest priority key
-    def top_key(self):
-        return self.elements[0][0] if self.elements else (float('inf'), float('inf'))
+    def insert(self, vertex, priority):
+        if vertex in self.vertex_set:
+            self.update(vertex, priority)
+        else:
+            heapq.heappush(self.heap, QueueNode(priority, vertex))
+            self.vertex_set.add(vertex)
 
-    # Remove an item from the queue
-    def remove(self, item):
-        for i in range(len(self.elements)):
-            if self.elements[i][1] == item:
-                del self.elements[i]
-                heapq.heapify(self.elements)
+    def remove(self, vertex):
+        self.vertex_set.remove(vertex)
+        for index, node in enumerate(self.heap):
+            if node.vertex == vertex:
+                self.heap[index] = self.heap[-1]
+                self.heap.pop()
+                heapq.heapify(self.heap)
                 break
 
-    # Update an item's priority
-    def update(self, item, priority):
-        self.remove(item)
-        self.put(item, priority)
+    def update(self, vertex, priority):
+        self.remove(vertex)
+        self.insert(vertex, priority)
 
-    # Log the current state of the priority queue
-    def log_queue(self):
-        log("Priority Queue state:")
-        for priority, item in sorted(self.elements):
-            log(f"  Vertex: {item}, Priority: {priority}")
+    def is_empty(self):
+        return len(self.heap) == 0
 
-# Function to scan for walls around the mouse and update the graph
+    def log_queue_state(self):
+        log("Current Priority Queue:")
+        for node in sorted(self.heap, key=lambda x: (x.priority.primary_key, x.priority.secondary_key)):
+            log(f"  Vertex: {node.vertex}, Priority: ({node.priority.primary_key}, {node.priority.secondary_key})")
+
+
+def move_and_replan(start_position):
+    """
+    Navigate from the current position towards the goal, updating the plan as obstacles are encountered.
+    """
+    path = [start_position]
+    current_position = start_position
+    last_position = current_position
+    DStarLite.compute_shortest_path()
+
+    while current_position not in DStarLite.goals:
+        # Ensure there's a valid path
+        assert (DStarLite.rhs[current_position] != float('inf')), "No known path to the goal!"
+
+        # Find the neighbor with the lowest cost
+        neighbors = DStarLite.graph.get_neighbors(current_position)
+        next_position = min(neighbors, key=lambda pos: DStarLite.graph.cost(current_position, pos) + DStarLite.g[pos])
+
+        # Move to the best next position
+        current_position = next_position
+        path.append(current_position)
+
+        # Scan the environment for any changes (e.g., obstacles)
+        changed_edges = []
+        for neighbor in neighbors:
+            old_cost = DStarLite.graph.cost(last_position, current_position)
+            new_cost = DStarLite.graph.cost(current_position, neighbor)
+            if old_cost != new_cost:
+                changed_edges.append((last_position, current_position))
+                changed_edges.append((current_position, neighbor))
+
+        # If any edges have changed, update the cost estimates
+        if changed_edges:
+            DStarLite.k_m += DStarLite.heuristic(last_position, current_position)
+            last_position = current_position
+
+            # Re-evaluate all vertices affected by the edge cost changes
+            for (u, v) in changed_edges:
+                new_cost = DStarLite.graph.cost(u, v)
+                if u != DStarLite.goals:
+                    DStarLite.rhs[u] = min(DStarLite.rhs[u], new_cost + DStarLite.g[v])
+                elif DStarLite.rhs[u] == new_cost + DStarLite.g[v]:
+                    if u != DStarLite.goals:
+                        min_cost = float('inf')
+                        neighbor_nodes = DStarLite.graph.get_neighbors(u)
+                        for neighbor in neighbor_nodes:
+                            temp_cost = DStarLite.graph.cost(u, neighbor) + DStarLite.g[neighbor]
+                            if min_cost > temp_cost:
+                                min_cost = temp_cost
+                        DStarLite.rhs[u] = min_cost
+                    DStarLite.update_vertex(u)
+
+        # Recompute the shortest path with the updated information
+        DStarLite.compute_shortest_path()
+
+    log("Path to goal found!")
+    return path
+
 def scan_and_update_walls(x, y, dstar_lite):
     global explored_cells
     explored_cells.add((x, y))
@@ -276,7 +397,8 @@ def scan_and_update_walls(x, y, dstar_lite):
     log(f"Scanning walls at ({x}, {y}) with orientation {current_orientation}")
     
     wall_detected = False
-    
+    updated_vertices = set()
+
     for direction in directions:
         # Check for walls in the specified direction
         has_wall = check_wall(direction)
@@ -285,14 +407,13 @@ def scan_and_update_walls(x, y, dstar_lite):
         nx, ny = None, None
         actual_direction = (current_orientation + direction) % 4
         
-        # Determine the position of the neighboring cell based on the actual direction
-        if actual_direction == NORTH:  # NORTH
+        if actual_direction == NORTH: 
             nx, ny = x, y + 1
-        elif actual_direction == EAST:  # EAST
+        elif actual_direction == EAST: 
             nx, ny = x + 1, y
-        elif actual_direction == SOUTH:  # SOUTH
+        elif actual_direction == SOUTH: 
             nx, ny = x, y - 1
-        elif actual_direction == WEST:  # WEST
+        elif actual_direction == WEST: 
             nx, ny = x - 1, y
             
         if valid_position(nx, ny, maze_width, maze_height):
@@ -301,14 +422,22 @@ def scan_and_update_walls(x, y, dstar_lite):
                 dstar_lite.graph.remove_edge((x, y), (nx, ny))
                 log(f"Removed edge between ({x}, {y}) and ({nx, ny}) due to wall.")
                 API.setWall(x, y, direction_map[actual_direction])
+                updated_vertices.add((x, y))
             else:
                 dstar_lite.graph.add_edge((x, y), (nx, ny))
                 log(f"Added edge between ({x}, {y}) and ({nx, ny}) - no wall detected.")
-    
-    # If a wall was detected, recompute the shortest path
+
     if wall_detected:
         log("Wall detected; recalculating shortest path.")
+        for u in updated_vertices:
+            log(f"Updating vertex {u}.")  # Log the vertex to see if anything strange happens here
+            dstar_lite.update_vertex(u)
+            neighbors = dstar_lite.graph.get_neighbors(u)
+            for s in neighbors:
+                log(f"Updating neighbor {s} of vertex {u}.")  # Log neighbors to catch issues
+                dstar_lite.update_vertex(s)
         dstar_lite.compute_shortest_path()
+
 
 # Function to check if there is a wall in a specified direction
 def check_wall(direction):
@@ -339,8 +468,14 @@ def move_to_next(x, y, graph, g):
             lowest_g = g[(nx, ny)]
             next_x, next_y = nx, ny
 
+    # If all neighbors have higher g values, the mouse should not move there
+    if lowest_g >= g[(x, y)]:
+        log(f"All neighbors have higher or equal g values. Replanning required.")
+        DStarLite.compute_shortest_path()
+        return x, y  # Replan and stay in the same position
+
     log(f"Next move determined: from ({x}, {y}) to ({next_x}, {next_y}) with g value {lowest_g}")
-    
+
     # Determine the direction to move
     if next_x == x and next_y == y + 1:
         target_orientation = NORTH
@@ -368,22 +503,30 @@ def move_to_next(x, y, graph, g):
 
     return next_x, next_y
 
-# Function to display the current g and rhs values in the maze
-def show(g, rhs=None, highlight_cells=None):
+
+def show(g, rhs, priority_queue=None):
     max_x = max([coord[0] for coord in g.keys()])
     max_y = max([coord[1] for coord in g.keys()])
+    
+    # Get all the cells currently in the priority queue
+    priority_cells = set(item.vertex for item in priority_queue.heap) if priority_queue else set()
 
     for y in range(max_y, -1, -1):  # Start from max_y down to 0 to display from top to bottom
         for x in range(max_x + 1):  # Start from 0 to max_x
-            value = rhs[(x, y)] if rhs else g[(x, y)]
-            if highlight_cells and (x, y) in highlight_cells:
+            g_value = g.get((x, y), float('inf'))
+            rhs_value = rhs.get((x, y), float('inf'))
+            
+            # Condense g and rhs values into a single string
+            g_str = "i" if g_value == float('inf') else str(int(g_value))
+            rhs_str = "i" if rhs_value == float('inf') else str(int(rhs_value))
+            cell_text = f"g{g_str}r{rhs_str}"
+            API.setText(x, y, cell_text)
+            
+            # Highlight cells that are in the priority queue
+            if (x, y) in priority_cells:
                 API.setColor(x, y, 'y')  # Highlight the cell in yellow
-            if value == float('inf'):
-                API.setText(x, y, 'inf')
-            else:
-                API.setText(x, y, str(int(value)))
 
-# Main function to run the D* Lite algorithm and navigate the maze
+
 def run_d_lite_6():
     try:
         global x, y, current_orientation
@@ -411,7 +554,7 @@ def run_d_lite_6():
             scan_and_update_walls(x, y, dstar_lite)
 
             # Step 2: Recompute the shortest path if necessary
-            if dstar_lite.priority_queue.top_key() < dstar_lite.calculate_key(start):
+            if dstar_lite.priority_queue.peek_priority() < dstar_lite.calculate_key(start):
                 log("Wall detected; recalculating shortest path.")
                 dstar_lite.compute_shortest_path()
 
@@ -420,13 +563,14 @@ def run_d_lite_6():
             x, y = move_to_next(x, y, graph, dstar_lite.g)
 
             # Display the state of g and rhs values in the simulator
-            show(dstar_lite.g, highlight_cells=[(x, y)])
+            show(dstar_lite.g, dstar_lite.rhs, dstar_lite.priority_queue)
 
         log("Mouse has reached the goal.")
 
     except Exception as e:
         log(f"Error during D* Lite execution: {e}")
         raise  # Re-raise the exception for further investigation
+
 
 # Entry point of the program
 if __name__ == "__main__":
