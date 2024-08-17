@@ -162,7 +162,7 @@ class DStarLite:
             # Recalculate rhs for this vertex based on its neighbors
             old_rhs = self.rhs[vertex]
             self.rhs[vertex] = min(
-                [self.g[neighbor] + self.graph.cost(vertex, neighbor) for neighbor in self.graph.get_neighbors(vertex)]
+                [self.g[neighbor] + self.graph.cost(vertex, neighbor) for neighbor in self.graph.get_all_neighbors(vertex)]
             )
             log(f"Recalculated rhs for vertex {vertex}. Old rhs = {old_rhs}, New rhs = {self.rhs[vertex]}")
 
@@ -201,7 +201,7 @@ class DStarLite:
             if self.g[u] > self.rhs[u]:  # Overconsistent case
                 log(f"Node {u} is overconsistent. g[{u}] > rhs[{u}]. Updating g[{u}] to rhs[{u}]")
                 self.g[u] = self.rhs[u]  # Relax the g value
-                for s in self.graph.get_neighbors(u):  # Update neighbors
+                for s in self.graph.get_accessible_neighbors(u):  # Update neighbors
                     log("----------------------------------------------------------------")
                     log(f"Updating neighbor {s} of node {u} before rhs[{s}] = {self.rhs[s]}")
                     self.update_vertex(s)
@@ -211,7 +211,7 @@ class DStarLite:
                 log(f"Node {u} is underconsistent. Setting g[{u}] to infinity.")
                 self.g[u] = float('inf')
                 self.update_vertex(u)
-                for s in self.graph.get_neighbors(u):
+                for s in self.graph.get_accessible_neighbors(u):
                     log(f"Updating neighbor {s} of node {u} before rhs[{s}] = {self.rhs[s]}")
                     self.update_vertex(s)
                     log(f"Updated neighbor {s} of node {u} after rhs[{s}] = {self.rhs[s]}")
@@ -266,9 +266,23 @@ class MazeGraph:
         if u in self.graph[v]:
             self.graph[v].remove(u)
 
-    # Get neighbors of a cell
-    def get_neighbors(self, node):
+    def get_accessible_neighbors(self, node):
+        # Returns only neighbors that are connected via an open path (no wall)
         return self.graph[node]
+
+    def get_all_neighbors(self, node):
+        # Returns all neighbors in all four directions, regardless of current walls
+        x, y = node
+        potential_neighbors = []
+        if y < self.height - 1:
+            potential_neighbors.append((x, y + 1))  # NORTH
+        if y > 0:
+            potential_neighbors.append((x, y - 1))  # SOUTH
+        if x < self.width - 1:
+            potential_neighbors.append((x + 1, y))  # EAST
+        if x > 0:
+            potential_neighbors.append((x - 1, y))  # WEST
+        return potential_neighbors
 
     # Check if two cells are connected
     def is_connected(self, u, v):
@@ -347,7 +361,7 @@ def move_and_replan(start_position):
         assert (DStarLite.rhs[current_position] != float('inf')), "No known path to the goal!"
 
         # Find the neighbor with the lowest cost
-        neighbors = DStarLite.graph.get_neighbors(current_position)
+        neighbors = DStarLite.graph.get_all_neighbors(current_position)
         next_position = min(neighbors, key=lambda pos: DStarLite.graph.cost(current_position, pos) + DStarLite.g[pos])
 
         # Move to the best next position
@@ -376,7 +390,7 @@ def move_and_replan(start_position):
                 elif DStarLite.rhs[u] == new_cost + DStarLite.g[v]:
                     if u != DStarLite.goals:
                         min_cost = float('inf')
-                        neighbor_nodes = DStarLite.graph.get_neighbors(u)
+                        neighbor_nodes = DStarLite.graph.get_all_neighbors(u)
                         for neighbor in neighbor_nodes:
                             temp_cost = DStarLite.graph.cost(u, neighbor) + DStarLite.g[neighbor]
                             if min_cost > temp_cost:
@@ -400,7 +414,6 @@ def scan_and_update_walls(x, y, dstar_lite):
     updated_vertices = set()
 
     for direction in directions:
-        # Check for walls in the specified direction
         has_wall = check_wall(direction)
         log(f"Checking wall in direction {direction}: {has_wall}")
         
@@ -426,17 +439,20 @@ def scan_and_update_walls(x, y, dstar_lite):
             else:
                 dstar_lite.graph.add_edge((x, y), (nx, ny))
                 log(f"Added edge between ({x}, {y}) and ({nx, ny}) - no wall detected.")
+                updated_vertices.add((x, y))
 
     if wall_detected:
         log("Wall detected; recalculating shortest path.")
         for u in updated_vertices:
-            log(f"Updating vertex {u}.")  # Log the vertex to see if anything strange happens here
+            log(f"Updating vertex {u}.") 
             dstar_lite.update_vertex(u)
-            neighbors = dstar_lite.graph.get_neighbors(u)
+            # Use get_all_neighbors to ensure all potential neighbors are considered
+            neighbors = dstar_lite.graph.get_all_neighbors(u)
             for s in neighbors:
-                log(f"Updating neighbor {s} of vertex {u}.")  # Log neighbors to catch issues
+                log(f"Updating neighbor {s} of vertex {u}.")  
                 dstar_lite.update_vertex(s)
         dstar_lite.compute_shortest_path()
+
 
 
 # Function to check if there is a wall in a specified direction
@@ -455,7 +471,7 @@ def valid_position(x, y, width, height):
 
 # Function to determine the next move based on the shortest path calculation
 def move_to_next(x, y, graph, g):
-    neighbors = graph.get_neighbors((x, y))
+    neighbors = graph.get_accessible_neighbors((x, y))
     log(f"Evaluating neighbors for move from ({x}, {y}): {neighbors}")
 
     lowest_g = float('inf')
