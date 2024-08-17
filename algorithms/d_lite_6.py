@@ -470,7 +470,7 @@ def valid_position(x, y, width, height):
     return 0 <= x < width and 0 <= y < height
 
 # Function to determine the next move based on the shortest path calculation
-def move_to_next(x, y, graph, g):
+def move_to_next(x, y, graph, g, dstar_lite):
     neighbors = graph.get_accessible_neighbors((x, y))
     log(f"Evaluating neighbors for move from ({x}, {y}): {neighbors}")
 
@@ -487,7 +487,7 @@ def move_to_next(x, y, graph, g):
     # If all neighbors have higher g values, the mouse should not move there
     if lowest_g >= g[(x, y)]:
         log(f"All neighbors have higher or equal g values. Replanning required.")
-        DStarLite.compute_shortest_path()
+        dstar_lite.compute_shortest_path()
         return x, y  # Replan and stay in the same position
 
     log(f"Next move determined: from ({x}, {y}) to ({next_x}, {next_y}) with g value {lowest_g}")
@@ -576,7 +576,7 @@ def run_d_lite_6():
 
             # Step 3: Determine and execute the next move
             log(f"Determining and executing the next move from ({x}, {y}).")
-            x, y = move_to_next(x, y, graph, dstar_lite.g)
+            x, y = move_to_next(x, y, graph, dstar_lite.g, dstar_lite)
 
             # Display the state of g and rhs values in the simulator
             show(dstar_lite.g, dstar_lite.rhs, dstar_lite.priority_queue)
