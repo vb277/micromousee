@@ -87,8 +87,10 @@ class LexicographicPriority:
 
     def __eq__(self, other):
         return self.primary_key == other.primary_key and self.secondary_key == other.secondary_key
+
     def __repr__(self):
-            return f"LexicographicPriority(primary_key={self.primary_key}, secondary_key={self.secondary_key})"
+        return f"(primary_key={self.primary_key}, secondary_key={self.secondary_key})"
+
 
 
 class QueueNode:
@@ -144,14 +146,47 @@ class DStarLite:
     # Calculate the priority key for a given vertex in the graph
     def calculate_key(self, vertex):
         g_rhs_min = min(self.g[vertex], self.rhs[vertex])
-        return LexicographicPriority(g_rhs_min + self.heuristic(self.start, vertex) + self.k_m, g_rhs_min)
+        heuristic_value = self.heuristic(self.start, vertex)
+        key = LexicographicPriority(g_rhs_min + heuristic_value + self.k_m, g_rhs_min)
+        
+        log(f"Calculating key for {vertex}:")
+        log(f"  g[{vertex}] = {self.g[vertex]}, rhs[{vertex}] = {self.rhs[vertex]}")
+        log(f"  Heuristic from start to {vertex}: {heuristic_value}")
+        log(f"  Key = (primary: {key.primary_key}, secondary: {key.secondary_key})")
+        
+        return key
+
 
     # Heuristic function that uses Manhattan distance
     def heuristic(self, a, b):
         return abs(a[0] - b[0]) + abs(a[1] - b[1])
+    
+    #   PRINTS GRAPH CONNECTIONS BETWEEN VERTICES AND CURRENT G AND RHS VALUES
+    # def print_graph_structure(self):
+    #     log("\nGraph Structure:")
+    #     max_x = self.graph.width
+    #     max_y = self.graph.height
+        
+    #     for y in range(max_y - 1, -1, -1):  # Start from the top row
+    #         row_str = ""
+    #         for x in range(max_x):
+    #             vertex = (x, y)
+    #             g_value = self.g.get(vertex, float('inf'))
+    #             rhs_value = self.rhs.get(vertex, float('inf'))
+
+    #             row_str += f"({x},{y}): g = {g_value}, rhs = {rhs_value} | "
+    #         log(row_str)
+
+    #     log("\nConnections:")
+    #     for y in range(max_y - 1, -1, -1):  # Start from the top row
+    #         for x in range(max_x):
+    #             vertex = (x, y)
+    #             neighbors = self.graph.get_accessible_neighbors(vertex)
+    #             connections_str = f"({x},{y}) -> {neighbors}"
+    #             log(connections_str)
+
 
     def update_vertex(self, vertex):
-        # Ensure vertex is a tuple and exists in g and rhs
         if not isinstance(vertex, tuple) or vertex not in self.g:
             log(f"Error: Vertex {vertex} is not valid or not initialized.")
             return
@@ -159,35 +194,52 @@ class DStarLite:
         log(f"Updating vertex {vertex}. Initial g = {self.g[vertex]}, rhs = {self.rhs[vertex]}")
 
         if vertex not in self.goals:
-            # Recalculate rhs for this vertex based on its neighbors
             old_rhs = self.rhs[vertex]
-            self.rhs[vertex] = min(
-                [self.g[neighbor] + self.graph.cost(vertex, neighbor) for neighbor in self.graph.get_all_neighbors(vertex)]
-            )
+            
+            # Logging neighbors and their values
+            neighbors = self.graph.get_all_neighbors(vertex)
+            log(f"Evaluating neighbors of {vertex} for rhs calculation:")
+            
+            # Calculate rhs considering valid neighbors
+            new_rhs = float('inf')
+            for neighbor in neighbors:
+                if self.graph.is_connected(vertex, neighbor):
+                    cost = self.graph.cost(vertex, neighbor)
+                    log(f"  Neighbor: {neighbor}, g[{neighbor}] = {self.g[neighbor]}, cost = {cost}")
+                    
+                    candidate_rhs = self.g[neighbor] + cost
+                    log(f"    Calculated candidate_rhs = g[{neighbor}] + cost = {self.g[neighbor]} + {cost} = {candidate_rhs}")
+                    
+                    if candidate_rhs < new_rhs:
+                        new_rhs = candidate_rhs
+
+            log(f"Final calculated rhs for vertex {vertex} = {new_rhs}")
+            self.rhs[vertex] = new_rhs
+
             log(f"Recalculated rhs for vertex {vertex}. Old rhs = {old_rhs}, New rhs = {self.rhs[vertex]}")
 
-        # Check if the vertex is in the priority queue before removing it
         if vertex in self.priority_queue.vertex_set:
             log(f"Removing vertex {vertex} from the priority queue.")
             self.priority_queue.remove(vertex)
 
-        # If g != rhs, reinsert with updated priority
         if self.g[vertex] != self.rhs[vertex]:
+            log(f"Updating g[{vertex}] from {self.g[vertex]} to {self.rhs[vertex]} since rhs[{vertex}] = {self.rhs[vertex]} < g[{vertex}]")
             key = self.calculate_key(vertex)
             self.priority_queue.insert(vertex, key)
             log(f"Reinserted vertex {vertex} with new key = ({key.primary_key}, {key.secondary_key}) into the priority queue.")
-            log(f"Updated vertex {vertex}: g = {self.g[vertex]}, rhs = {self.rhs[vertex]}")
         else:
             log(f"No update required for vertex {vertex}: g = {self.g[vertex]}, rhs = {self.rhs[vertex]}")
 
-        # Log the current state of the priority queue
         self.priority_queue.log_queue_state()
 
-        # Update the display with the new rhs value in the simulator
         if self.rhs[vertex] == float('inf'):
             API.setText(vertex[0], vertex[1], "inf")
         else:
             API.setText(vertex[0], vertex[1], str(int(self.rhs[vertex])))
+
+        log(f"Final state for vertex {vertex}: g = {self.g[vertex]}, rhs = {self.rhs[vertex]}")
+        
+        # self.print_graph_structure()
 
 
     def compute_shortest_path(self):
@@ -195,26 +247,22 @@ class DStarLite:
         
         while not self.priority_queue.is_empty() and (self.priority_queue.peek_priority() < self.calculate_key(self.start) or self.rhs[self.start] != self.g[self.start]):
             u = self.priority_queue.extract_min()
-            log(f"Popping node {u} with g[{u}] = {self.g[u]} and rhs[{u}] = {self.rhs[u]} from the priority queue")
+            log(f"● ● ● Popping node {u} with g[{u}] = {self.g[u]} and rhs[{u}] = {self.rhs[u]} from the priority queue")
             self.priority_queue.log_queue_state()
 
-            if self.g[u] > self.rhs[u]:  # Overconsistent case
+            # Overconsistent case
+            if self.g[u] > self.rhs[u]:
                 log(f"Node {u} is overconsistent. g[{u}] > rhs[{u}]. Updating g[{u}] to rhs[{u}]")
                 self.g[u] = self.rhs[u]  # Relax the g value
-                for s in self.graph.get_accessible_neighbors(u):  # Update neighbors
-                    log("----------------------------------------------------------------")
-                    log(f"Updating neighbor {s} of node {u} before rhs[{s}] = {self.rhs[s]}")
-                    self.update_vertex(s)
-                    log(f"Updated neighbor {s} of node {u} after rhs[{s}] = {self.rhs[s]}")
-                    log("----------------------------------------------------------------")
             else:  # Underconsistent case
                 log(f"Node {u} is underconsistent. Setting g[{u}] to infinity.")
                 self.g[u] = float('inf')
-                self.update_vertex(u)
-                for s in self.graph.get_accessible_neighbors(u):
-                    log(f"Updating neighbor {s} of node {u} before rhs[{s}] = {self.rhs[s]}")
-                    self.update_vertex(s)
-                    log(f"Updated neighbor {s} of node {u} after rhs[{s}] = {self.rhs[s]}")
+            
+            # IMPORTANT: Update all neighbors, whether accessible or not
+            for s in self.graph.get_all_neighbors(u):
+                log(f"Updating neighbor {s} of node {u} before rhs[{s}] = {self.rhs[s]}")
+                self.update_vertex(s)
+                log(f"Updated neighbor {s} of node {u} after rhs[{s}] = {self.rhs[s]}")
 
             log(f"Finished processing node {u} with new g[{u}] = {self.g[u]} and rhs[{u}] = {self.rhs[u]}")
             log(f"=======================================================================================")
@@ -223,6 +271,8 @@ class DStarLite:
         
         # Display the g and rhs values and highlight the priority queue cells in the simulator
         show(self.g, self.rhs, self.priority_queue)
+
+
 
 
 class MazeGraph:
@@ -299,7 +349,6 @@ class MazeGraph:
         return list(self.graph.keys())
 
 
-
 class PriorityQueue:
     def __init__(self):
         self.heap = []
@@ -326,17 +375,27 @@ class PriorityQueue:
             self.vertex_set.add(vertex)
 
     def remove(self, vertex):
-        self.vertex_set.remove(vertex)
-        for index, node in enumerate(self.heap):
-            if node.vertex == vertex:
-                self.heap[index] = self.heap[-1]
-                self.heap.pop()
-                heapq.heapify(self.heap)
-                break
-
+        if vertex in self.vertex_set:
+            self.vertex_set.remove(vertex)
+            for index, node in enumerate(self.heap):
+                if node.vertex == vertex:
+                    # Replace the node with the last element
+                    self.heap[index] = self.heap[-1]
+                    self.heap.pop()
+                    # Restore the heap property
+                    heapq.heapify(self.heap)
+                    break
     def update(self, vertex, priority):
-        self.remove(vertex)
-        self.insert(vertex, priority)
+        if vertex in self.vertex_set:
+            # Find the vertex in the heap
+            for index, node in enumerate(self.heap):
+                if node.vertex == vertex:
+                    self.heap[index].priority = priority
+                    # Restore the heap property
+                    heapq.heapify(self.heap)
+                    break
+        else:
+            self.insert(vertex, priority)
 
     def is_empty(self):
         return len(self.heap) == 0
@@ -563,7 +622,7 @@ def run_d_lite_6():
 
         # Main movement loop
         while (x, y) not in goals:
-            log(f"Starting loop with mouse at ({x}, {y}), current orientation: {current_orientation}.")
+            log(f"----> Starting loop with mouse at ({x}, {y}), current orientation: {current_orientation}.")
 
             # Step 1: Scan for walls
             log(f"Mouse at ({x}, {y}), orientation: {current_orientation}. Scanning for walls.")
