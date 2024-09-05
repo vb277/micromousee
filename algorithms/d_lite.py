@@ -13,7 +13,7 @@ current_orientation = NORTH
 x, y = 0, 0
 
 # Maze dimensions
-maze_width, maze_height = 6, 6
+maze_width, maze_height = 16, 16
 
 # Wall data structures to track where walls are in the maze
 horizontal_walls = [[0] * maze_width for _ in range(maze_height + 1)]
@@ -22,10 +22,8 @@ vertical_walls = [[0] * (maze_width + 1) for _ in range(maze_height)]
 # Set to track which cells have been explored
 explored_cells = set()
 
-phase = 'initial'
-
 # Function to log messages for debugging purposes
-def log(string, skip=False):
+def log(string, skip=True):
     if not skip:
         sys.stderr.write("{}\n".format(string))
         sys.stderr.flush()
@@ -229,17 +227,20 @@ class MazeGraph:
 
     # Add an edge between two cells
     def add_edge(self, u, v):
-        if v not in self.graph[u]:
+        not_exists = v not in self.graph[u]
+        if not_exists:        
             self.graph[u].append(v)
-        if u not in self.graph[v]:
             self.graph[v].append(u)
+        return not_exists
 
     # Remove an edge between two cells
     def remove_edge(self, u, v):
-        self.graph[u] = [i for i in self.graph[u] if i != v]
-        self.graph[v] = [i for i in self.graph[v] if i != u]
-        log(f"Removing edge between {u} and {v}")
-
+        exists = v in self.graph[u]
+        if exists:
+            self.graph[u] = [i for i in self.graph[u] if i != v]
+            self.graph[v] = [i for i in self.graph[v] if i != u]
+        return exists
+    
     def get_accessible_neighbors(self, node):
         # Returns only neighbors that are connected via an open path (no wall)
         return self.graph[node]
@@ -338,7 +339,8 @@ class PriorityQueue:
         for node in sorted(self.heap, key=lambda x: (x.priority.primary_key, x.priority.secondary_key)):
             log(f"  Vertex: {node.vertex}, Priority: ({node.priority.primary_key}, {node.priority.secondary_key})")
 
-def scan_and_update_walls(x, y, dstar_lite):
+def scan_and_update_walls(start, last, dstar_lite):
+    x, y = start
     global explored_cells
     explored_cells.add((x, y))
     directions = [0, 1, 3]  # NORTH, EAST, WEST
@@ -347,6 +349,8 @@ def scan_and_update_walls(x, y, dstar_lite):
     
     wall_detected = False
     updated_vertices = set()
+
+    graph_changed = False
 
     for direction in directions:
         has_wall = check_wall(direction)
@@ -368,29 +372,28 @@ def scan_and_update_walls(x, y, dstar_lite):
         if valid_position(nx, ny, maze_width, maze_height):
             if has_wall:
                 wall_detected = True
-                dstar_lite.graph.remove_edge((x, y), (nx, ny))
+                if dstar_lite.graph.remove_edge((x, y), (nx, ny)):
+                    graph_changed = True
+                log(f"Removing edge: {(x, y)} and {(nx, ny)} and {graph_changed}")
                 API.setWall(x, y, direction_map[actual_direction])
                 updated_vertices.add((x, y))
-                dstar_lite.graph.remove_edge((x, y), (nx, ny))
             else:
-                dstar_lite.graph.add_edge((x, y), (nx, ny))
+                if dstar_lite.graph.add_edge((x, y), (nx, ny)):
+                    graph_changed = True
                 log(f"Added edge between ({x}, {y}) and ({nx, ny}) - no wall detected.")
                 updated_vertices.add((x, y))
 
     log(f"Wall has been detected: {wall_detected}")
-    # if wall_detected:
-    #     log("Wall detected; recalculating shortest path.")
-    for u in updated_vertices:
-        dstar_lite.update_vertex(u)
-        log(f"Updating vertex {u} and queue length = {len(dstar_lite.priority_queue.heap)}") 
-        # Use get_all_neighbors to ensure all potential neighbors are considered
-        neighbors = dstar_lite.graph.get_all_neighbors(u)
-        for s in neighbors:
-            log(f"Updating neighbor {s} of vertex {u}.")  
-            dstar_lite.update_vertex(s)
-    dstar_lite.compute_shortest_path()
 
-
+    if graph_changed:
+        dstar_lite.k_m += dstar_lite.heuristic(last, start)
+        dstar_lite.update_vertex(start)
+        for u in dstar_lite.graph.get_all_neighbors(start):
+            dstar_lite.update_vertex(u)
+        dstar_lite.compute_shortest_path()
+        return start
+    else:
+        return last
 
 # Function to check if there is a wall in a specified direction
 def check_wall(direction):
@@ -408,30 +411,10 @@ def check_wall(direction):
 def valid_position(x, y, width, height):
     return 0 <= x < width and 0 <= y < height
 
-# Function to determine the next move based on the shortest path calculation
-def move_to_next(x, y, graph, g, dstar_lite):
-    neighbors = graph.get_accessible_neighbors((x, y))
-    log(f"Evaluating neighbors for move from ({x}, {y}): {neighbors}")
-
-    lowest_g = float('inf')
-    next_x, next_y = x, y
-
-    # Find the neighbor with the lowest g value
-    for nx, ny in neighbors:
-        log(f"Neighbor ({nx}, {ny}) has g value {g[(nx, ny)]}")
-        if g[(nx, ny)] < lowest_g:
-            lowest_g = g[(nx, ny)]
-            next_x, next_y = nx, ny
-
-    # If all neighbors have higher g values, the mouse should not move there
-    if lowest_g >= g[(x, y)]:
-        log(f"All neighbors have higher or equal g values. Replanning required.")
-        dstar_lite.compute_shortest_path()
-        return x, y  # Replan and stay in the same position
-
-    log(f"Next move determined: from ({x}, {y}) to ({next_x}, {next_y}) with g value {lowest_g}")
-
-    # Determine the direction to move
+# Move to next position in the simulator
+def mms_move_to(prev_position, next_position):
+    x, y = prev_position
+    next_x, next_y = next_position
     if next_x == x and next_y == y + 1:
         target_orientation = NORTH
     elif next_x == x + 1 and next_y == y:
@@ -456,7 +439,22 @@ def move_to_next(x, y, graph, g, dstar_lite):
     # Move forward after turning
     move_forward()
 
-    return next_x, next_y
+def find_next_position(s_start, graph, g, dstar_lite):
+    neighbors = graph.get_accessible_neighbors((x, y))
+    log(f"Evaluating neighbors for move from ({x}, {y}): {neighbors}")
+
+    lowest_g = float('inf')
+    next_x, next_y = x, y
+
+    # Find the neighbor with the lowest g value
+    for nx, ny in neighbors:
+        log(f"Neighbor ({nx}, {ny}) has g value {g[(nx, ny)]}")
+        if g[(nx, ny)] < lowest_g:
+            lowest_g = g[(nx, ny)]
+            next_x, next_y = nx, ny
+
+    return (next_x, next_y)
+
 
 
 def show(g, rhs, priority_queue=None):
@@ -481,42 +479,34 @@ def show(g, rhs, priority_queue=None):
             # if (x, y) in priority_cells:
             #     API.setColor(x, y, 'y')  # Highlight the cell in yellow
 
-def set_virtual_walls_around_unexplored(graph, maze_width, maze_height, explored_cells):
-    for x in range(maze_width):
-        for y in range(maze_height):
-            if (x, y) not in explored_cells:
-                # North wall
-                if valid_position(x, y + 1, maze_width, maze_height) and (x, y + 1) in explored_cells:
-                    graph.remove_edge((x, y), (x, y + 1))
-                    API.setWall(x, y, 'n')
-                    log(f"Set north wall at ({x}, {y})")
-                # East wall
-                if valid_position(x + 1, y, maze_width, maze_height) and (x + 1, y) in explored_cells:
-                    graph.remove_edge((x, y), (x + 1, y))
-                    API.setWall(x, y, 'e')
-                    log(f"Set east wall at ({x}, {y})")
-                # South wall
-                if valid_position(x, y - 1, maze_width, maze_height) and (x, y - 1) in explored_cells:
-                    graph.remove_edge((x, y), (x, y - 1))
-                    API.setWall(x, y, 's')
-                    log(f"Set south wall at ({x}, {y})")
-                # West wall
-                if valid_position(x - 1, y, maze_width, maze_height) and (x - 1, y) in explored_cells:
-                    graph.remove_edge((x, y), (x - 1, y))
-                    API.setWall(x, y, 'w')
-                    log(f"Set west wall at ({x}, {y})")
+
+def add_to_path(visited, path_stack, u):
+    if u not in visited:
+        visited.add(u)
+        path_stack.append(u)
+        return
+
+    # u is the vertex which the robot already visited. 
+    # So all the vertex visited after u are not needed for the path.
+    while path_stack[-1] != u:
+        v = path_stack.pop()
+        visited.remove(v)
 
 
-
-def run_d_lite_6():
+def run_d_lite():
     try:
-        global x, y, current_orientation, phase  # Use the global phase variable
+        global x, y, current_orientation
 
-        width, height = 6, 6
+
+        width, height = 16, 16
         start = (0, 0)
+        x, y = start
+        
 
-        # Select multiple predefined goals
-        goals = [(2, 2), (3, 2), (2, 3), (3, 3)]  # Multiple goal cells
+        # Select a Random goal
+        goal = (random.randrange(0, width - 1), random.randrange(0, height - 1))
+        goals = [goal]
+        goals = [(7, 7), (8, 7), (7, 8), (8, 8)]  # Multiple goal cells
 
         log(f"goals = {goals}", False)
 
@@ -532,84 +522,75 @@ def run_d_lite_6():
         dstar_lite.compute_shortest_path()
         log(f"queue = {dstar_lite.priority_queue.heap}")
 
-        log("=====Initial conditions======")
+
+        log(f"=====Initial conditions======")
         for key in dstar_lite.graph.graph.keys():
             log(f"key = {key} and value = {dstar_lite.graph.graph[key]}")
-        log("\n")
+        log(f"\n")
         log(f"{dstar_lite.graph.graph}")
         log(f"{dstar_lite.g}")
         log(f"{dstar_lite.rhs}")
 
+        # Initially there are no walls, so before making a first move 
+        # we need to check for walls. 
+        last = start
+        last = scan_and_update_walls(start, last, dstar_lite)
+ 
+        visited = set()
+        path_stack = []
+
+        add_to_path(visited, path_stack, start)
+
+        failed = False
+
         # Main movement loop
-        while True:
-            log(f"----> Phase: {phase}. Mouse at ({x}, {y}), current orientation: {current_orientation}.")
+        while start not in goals:
 
-            # Set color based on the phase
-            if phase == "initial":
-                API.setColor(x, y, 'y')  # Yellow for the first run
-            elif phase == "return":
-                API.setColor(x, y, 'b')  # Blue for the return run
-            elif phase == "final":
-                API.setColor(x, y, 'g')  # Green for the final run
+            if dstar_lite.g[start] == float("inf"):
+                log(f"No path exists")
+                failed = True
+                break
+            
+            prev = start
+            start = find_next_position(start, graph, dstar_lite.g, dstar_lite)
+            dstar_lite.start = start
+            mms_move_to(prev, start)
 
-            if phase == 'initial' and dstar_lite.start in goals:
-                log("Mouse has reached the goal. Switching to return phase.")
-                phase = 'return'
-                # Set new goal as the start position
-                new_goals = [start]
-                dstar_lite.goals = new_goals
-                dstar_lite.initialize(dstar_lite.start, new_goals)
-                dstar_lite.compute_shortest_path()
-                continue  # Proceed to the next iteration with updated goals
+            add_to_path(visited, path_stack, start)
+                 
+            # current simulator mouse position
+            x, y = start
 
-            if phase == 'return' and (x, y) == start:
-                log("Mouse has returned to the start. Preparing for the final run.")
-                
-                # Set virtual walls around all unexplored cells
-                set_virtual_walls_around_unexplored(graph, maze_width, maze_height, explored_cells)
-
-                # Switch to final phase
-                phase = 'final'
-                # Re-initialize the algorithm for the final run
-                dstar_lite.initialize(dstar_lite.start, goals)
-                dstar_lite.compute_shortest_path()
-                continue
-
-            if phase == 'final' and dstar_lite.start in goals:
-                log("Mouse has completed the final run.")
-                break  # Exit the loop as the task is complete
-
-            # Step 1: Scan for walls
-            log(f"Mouse at ({x}, {y}), orientation: {current_orientation}. Scanning for walls.")
-            scan_and_update_walls(x, y, dstar_lite)
-
-            # Step 2: Recompute the shortest path if necessary
-            if dstar_lite.priority_queue.peek_priority() < dstar_lite.calculate_key(start):
-                log("Wall detected; recalculating shortest path.")
-            dstar_lite.compute_shortest_path()
-
-            # Step 3: Determine and execute the next move
-            log(f"Determining and executing the next move from ({x}, {y}).")
-            x, y = move_to_next(x, y, graph, dstar_lite.g, dstar_lite)
-
-            dstar_lite.start = (x, y)
-
+            last = scan_and_update_walls(start, last, dstar_lite)
+            
             # Display the state of g and rhs values in the simulator
             show(dstar_lite.g, dstar_lite.rhs, dstar_lite.priority_queue)
 
-        log("Mouse has completed its run.")
+        if not failed:
+            log("Mouse has reached the goal.")
+            log("Going back to start")
+            copy_path = path_stack[:]
+            while copy_path:
+                next_pos = copy_path.pop()
+                mms_move_to(start, next_pos)
+                start = next_pos    
+
+            log("Going to goal again")
+            for i in path_stack:
+                mms_move_to(start, i)
+                start = i
+            
 
     except Exception as e:
         log(f"Error during D* Lite execution: {e}")
         raise  # Re-raise the exception for further investigation
 
 
-
 # Entry point of the program
 if __name__ == "__main__":
     try:
         log("Starting D* Lite algorithm...")
-        run_d_lite_6()
+        run_d_lite()
         log("Finished running D* Lite algorithm.")
     except Exception as e:
         log(f"Error in main execution: {e}")

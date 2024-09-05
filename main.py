@@ -7,9 +7,11 @@ from algorithms.ff_manhattan import run_ff_manhattan
 from algorithms.directional_heuristic import run_directional_heuristic
 from algorithms.directional_heuristic_6 import run_directional_heuristic_6
 from algorithms.d_lite_6 import run_d_lite_6
+from algorithms.d_lite import run_d_lite
+from algorithms.d_lite_km import run_d_lite_km
 
 def main():
-    algorithm = "dlite6"  
+    algorithm = "dlite"  
 
     if algorithm == "dfs":
         run_dfs()
@@ -29,6 +31,10 @@ def main():
         run_directional_heuristic_6()
     elif algorithm == "dlite6":
         run_d_lite_6()
+    elif algorithm == "dlite":
+        run_d_lite()
+    elif algorithm == "dlitekm":
+        run_d_lite_km()
 
 if __name__ == "__main__":
     main()

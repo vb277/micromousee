@@ -13,7 +13,7 @@ current_orientation = NORTH
 x, y = 0, 0
 
 # Maze dimensions
-maze_width, maze_height = 6, 6
+maze_width, maze_height = 16, 16
 
 # Wall data structures to track where walls are in the maze
 horizontal_walls = [[0] * maze_width for _ in range(maze_height + 1)]
@@ -22,10 +22,8 @@ vertical_walls = [[0] * (maze_width + 1) for _ in range(maze_height)]
 # Set to track which cells have been explored
 explored_cells = set()
 
-phase = 'initial'
-
 # Function to log messages for debugging purposes
-def log(string, skip=False):
+def log(string, skip=True):
     if not skip:
         sys.stderr.write("{}\n".format(string))
         sys.stderr.flush()
@@ -481,44 +479,23 @@ def show(g, rhs, priority_queue=None):
             # if (x, y) in priority_cells:
             #     API.setColor(x, y, 'y')  # Highlight the cell in yellow
 
-def set_virtual_walls_around_unexplored(graph, maze_width, maze_height, explored_cells):
-    for x in range(maze_width):
-        for y in range(maze_height):
-            if (x, y) not in explored_cells:
-                # North wall
-                if valid_position(x, y + 1, maze_width, maze_height) and (x, y + 1) in explored_cells:
-                    graph.remove_edge((x, y), (x, y + 1))
-                    API.setWall(x, y, 'n')
-                    log(f"Set north wall at ({x}, {y})")
-                # East wall
-                if valid_position(x + 1, y, maze_width, maze_height) and (x + 1, y) in explored_cells:
-                    graph.remove_edge((x, y), (x + 1, y))
-                    API.setWall(x, y, 'e')
-                    log(f"Set east wall at ({x}, {y})")
-                # South wall
-                if valid_position(x, y - 1, maze_width, maze_height) and (x, y - 1) in explored_cells:
-                    graph.remove_edge((x, y), (x, y - 1))
-                    API.setWall(x, y, 's')
-                    log(f"Set south wall at ({x}, {y})")
-                # West wall
-                if valid_position(x - 1, y, maze_width, maze_height) and (x - 1, y) in explored_cells:
-                    graph.remove_edge((x, y), (x - 1, y))
-                    API.setWall(x, y, 'w')
-                    log(f"Set west wall at ({x}, {y})")
 
-
-
-def run_d_lite_6():
+def run_d_lite_km():
     try:
-        global x, y, current_orientation, phase  # Use the global phase variable
+        global x, y, current_orientation
 
-        width, height = 6, 6
+
+        width, height = 16, 16
         start = (0, 0)
+        
 
-        # Select multiple predefined goals
-        goals = [(2, 2), (3, 2), (2, 3), (3, 3)]  # Multiple goal cells
+        # Select a Random goal
+        goal = (random.randrange(0, width - 1), random.randrange(0, height - 1))
+        goals = [goal]
+        goals = [(7, 7), (8, 7), (7, 8), (8, 8)]  # Multiple goal cells
 
         log(f"goals = {goals}", False)
+
 
         # Initialize the MazeGraph
         graph = MazeGraph(width, height)
@@ -532,52 +509,34 @@ def run_d_lite_6():
         dstar_lite.compute_shortest_path()
         log(f"queue = {dstar_lite.priority_queue.heap}")
 
-        log("=====Initial conditions======")
+
+        log(f"=====Initial conditions======")
         for key in dstar_lite.graph.graph.keys():
             log(f"key = {key} and value = {dstar_lite.graph.graph[key]}")
-        log("\n")
+        log(f"\n")
         log(f"{dstar_lite.graph.graph}")
         log(f"{dstar_lite.g}")
         log(f"{dstar_lite.rhs}")
 
         # Main movement loop
-        while True:
-            log(f"----> Phase: {phase}. Mouse at ({x}, {y}), current orientation: {current_orientation}.")
+        while dstar_lite.start not in goals:
 
-            # Set color based on the phase
-            if phase == "initial":
-                API.setColor(x, y, 'y')  # Yellow for the first run
-            elif phase == "return":
-                API.setColor(x, y, 'b')  # Blue for the return run
-            elif phase == "final":
-                API.setColor(x, y, 'g')  # Green for the final run
+            # v1 = float("inf")
+            # v2 = None
+            # for neighbour in dstar_lite.graph.get_all_neighbors():
+            #     f = 1 + dstar_lite.g[neighbor]
+            #     if f < v1:
+            #         v1 = f
+            #         v2 = neighbor
 
-            if phase == 'initial' and dstar_lite.start in goals:
-                log("Mouse has reached the goal. Switching to return phase.")
-                phase = 'return'
-                # Set new goal as the start position
-                new_goals = [start]
-                dstar_lite.goals = new_goals
-                dstar_lite.initialize(dstar_lite.start, new_goals)
-                dstar_lite.compute_shortest_path()
-                continue  # Proceed to the next iteration with updated goals
+            if dstar_lite.g[(x, y)] == float("inf"):
+                log(f"No path exists")
 
-            if phase == 'return' and (x, y) == start:
-                log("Mouse has returned to the start. Preparing for the final run.")
-                
-                # Set virtual walls around all unexplored cells
-                set_virtual_walls_around_unexplored(graph, maze_width, maze_height, explored_cells)
+            for key in dstar_lite.graph.graph.keys():
+                log(f"key = {key} and value = {dstar_lite.graph.graph[key]}")
+            log(f"\n")
 
-                # Switch to final phase
-                phase = 'final'
-                # Re-initialize the algorithm for the final run
-                dstar_lite.initialize(dstar_lite.start, goals)
-                dstar_lite.compute_shortest_path()
-                continue
-
-            if phase == 'final' and dstar_lite.start in goals:
-                log("Mouse has completed the final run.")
-                break  # Exit the loop as the task is complete
+            log(f"----> Starting loop with mouse at ({x}, {y}), current orientation: {current_orientation}.")
 
             # Step 1: Scan for walls
             log(f"Mouse at ({x}, {y}), orientation: {current_orientation}. Scanning for walls.")
@@ -597,19 +556,18 @@ def run_d_lite_6():
             # Display the state of g and rhs values in the simulator
             show(dstar_lite.g, dstar_lite.rhs, dstar_lite.priority_queue)
 
-        log("Mouse has completed its run.")
+        log("Mouse has reached the goal.")
 
     except Exception as e:
         log(f"Error during D* Lite execution: {e}")
         raise  # Re-raise the exception for further investigation
 
 
-
 # Entry point of the program
 if __name__ == "__main__":
     try:
         log("Starting D* Lite algorithm...")
-        run_d_lite_6()
+        run_d_lite_km()
         log("Finished running D* Lite algorithm.")
     except Exception as e:
         log(f"Error in main execution: {e}")
