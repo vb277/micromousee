@@ -17,8 +17,7 @@ from algorithms.flood_fill_32 import run_flood_fill_32
 from algorithms.d_lite_ff_32 import run_d_lite_ff_32
 
 def main():
-    algorithm = "dlite6"  
-    # dlite dliteff flood_fill
+    algorithm = "dliteff32"  
     if algorithm == "dfs":
         run_dfs()
     elif algorithm == "wall_follower":
