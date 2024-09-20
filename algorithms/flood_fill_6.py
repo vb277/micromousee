@@ -13,6 +13,10 @@ current_orientation = NORTH
 x, y = 0, 0
 
 maze_width, maze_height = 6, 6
+
+# Citation: The idea of representing walls as horizontal and vertical arrays was inspired by the Flood Fill algorithm 
+# discussed in the Micromouse project documentation at IEEE Bruins: 
+# https://projects.ieeebruins.com/micromouse/floodfill-module
 horizontal_walls = [[0] * maze_width for _ in range(maze_height + 1)]
 vertical_walls = [[0] * (maze_width + 1) for _ in range(maze_height)]
 
