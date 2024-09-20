@@ -48,7 +48,7 @@ def main():
         run_d_lite_ff()
     elif algorithm == "dlite32":
         run_d_lite_32()
-    elif algorithm == "ff32":
+    elif algorithm == "flood_fill_32":
         run_flood_fill_32()
     elif algorithm == "dliteff32":
         run_d_lite_ff_32()
