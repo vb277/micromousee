@@ -67,3 +67,7 @@ Welcome to the **Micromouse Maze Solver** repository! This project implements mu
 ### 5. Run the Simulator
 
 After selecting the algorithm in the `main.py` file, press **Run** in the simulator interface. Make sure the correct maze is loaded, and the path to your Python environment and `main.py` is correctly set.
+
+### Maze Files
+
+All maze files used in this project were sourced from the [Micromouse Online Mazefiles Repository](https://github.com/micromouseonline/mazefiles/tree/master).
