@@ -2,7 +2,7 @@
 
 Welcome to the **Micromouse Maze Solver** repository! This project implements multiple maze-solving algorithms including **D\* Lite**, **Flood Fill**, and a **hybrid approach (D\* Lite + Flood Fill)**. These algorithms are designed to solve grid-based mazes and are tested within the Micromouse Simulator.
 
-![](gif-your-ScreenRecording2024-09-21at10.56.53-ezgif.com-video-to-gif-converter.gif-file.gif)
+![](ScreenRecording2024-09-21at10.56.53-ezgif.com-video-to-gif-converter.gif)
 
 ---
 
