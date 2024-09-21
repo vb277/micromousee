@@ -43,6 +43,9 @@ Welcome to the **Micromouse Maze Solver** repository! This project implements mu
    algorithm = "dliteff32"  # Example: Running the D* Lite with Flood Fill hybrid for 32x32 mazes
    ```
 
+5. **Choose the Maze**:
+   In the `mazes` folder, one can find various 16x16 mazes. There are 32x32 mazes in the `halfsize` folder, and 6x6 mazes in the `small mazes` folder.
+
 ### Here are the available options for the `algorithm` variable:
 
 #### **Flood Fill Algorithms**:
